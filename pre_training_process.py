@@ -6,6 +6,7 @@ import cv2
 import numpy as np 
 import os 
 from typing import Literal
+import warnings
 
 from utils import timeit
 
@@ -31,6 +32,8 @@ def get_merge_point_idx(contour1, contour2):
     """Find the closest points between two contours."""
     idx1, idx2 = 0, 0
     min_distance = float('inf')
+    if len(contour1) > 10000: 
+        warnings.warn(f"Contour 1 is large ({len(contour1)})- processing time may be extensive.")
     for i, p1 in enumerate(contour1):
         for j, p2 in enumerate(contour2):
             distance = (p2[0][0] - p1[0][0]) ** 2 + (p2[0][1] - p1[0][1]) ** 2
@@ -163,8 +166,9 @@ def process_masks(mask_list, output_folder="yolo/dataset/labels",
                   visualise_img : bool = False, 
                   resize_factor : float = 0.2,
                   dir : Literal['train', 'val'] = 'train',
-                  save_imgs     : bool = False):
-    """Process a list of masks, convert them to YOLO format, validate them visually, and continue on keypress."""
+                  save_imgs     : bool = False,
+                  keep_previous_progress : bool = True):
+    """Process a list of masks, convert them to YOLO format, validate them visually, and continue on keypress if visualising."""
 
     output_folder = os.path.join(output_folder, dir)
     if not os.path.exists(output_folder):
@@ -173,6 +177,9 @@ def process_masks(mask_list, output_folder="yolo/dataset/labels",
     for mask_path in mask_list:
         base_name = os.path.splitext(os.path.basename(mask_path))[0]
         output_txt = os.path.join(output_folder, f"{base_name}.txt")
+        if os.path.exists(output_txt) and keep_previous_progress:
+            print(f"Skipping {mask_path} (already processed)")
+            continue
         output_visual = os.path.join(output_folder, f"{base_name}_reconstructed.png")
 
         print(f"Processing: {mask_path}")
@@ -203,7 +210,7 @@ def process_masks(mask_list, output_folder="yolo/dataset/labels",
             cv2.destroyAllWindows()
 
         if save_imgs:
-                cv2.imwrite(output_visual, reconstructed_mask)
+            cv2.imwrite(output_visual, reconstructed_mask)
 
 
 def main(mask_dir: str,
