@@ -5,6 +5,7 @@
 import cv2 
 import numpy as np 
 import os 
+from typing import Literal
 
 from utils import timeit
 
@@ -64,7 +65,7 @@ def group_child_contours_with_parent(hierarchy):
     return groups
 
 
-def list_mask_paths(dir: str, n : int = 1) -> list[str]:
+def list_mask_paths_n_rdom(dir: str, n : int = 1) -> list[str]:
     """
     For the number, n, given, return a list of n pasks to mask files located in the specified directory, dir.
     """
@@ -74,6 +75,13 @@ def list_mask_paths(dir: str, n : int = 1) -> list[str]:
     indices = random.sample(range(0, len(mask_files)), n)
 
     return [os.path.join(dir, mask_files[i]) for i in indices]
+
+def list_mask_paths(dir: str) -> list[str]: #maybe move this to utilies if something similar is needed for another script..
+    """
+    List all paths (filename and path included) in a str list.
+    """
+    mask_files = os.listdir(dir)
+    return [os.path.join(dir, mask_file) for mask_file in mask_files]
 
 
 # FUNCTIONS (main / larger)
@@ -151,7 +159,10 @@ def convert_yolo_label_to_mask(image_shape, label_file):
 
     return mask
 
-def process_masks(mask_list, output_folder="testing/output", visualise_img : bool = False, resize_factor : float = 0.2):
+def process_masks(mask_list, output_folder="yolo/dataset/labels", 
+                  visualise_img : bool = False, 
+                  resize_factor : float = 0.2,
+                  save_imgs     : bool = False):
     """Process a list of masks, convert them to YOLO format, validate them visually, and continue on keypress."""
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -173,7 +184,7 @@ def process_masks(mask_list, output_folder="testing/output", visualise_img : boo
         if visualise_img:  
             # Convert YOLO back to mask
             reconstructed_mask = convert_yolo_label_to_mask(test_mask.shape, output_txt)
-            cv2.imwrite(output_visual, reconstructed_mask)
+            
 
             # Display original and reconstructed mask for validation
             original_mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
@@ -187,3 +198,19 @@ def process_masks(mask_list, output_folder="testing/output", visualise_img : boo
 
             cv2.waitKey(0)  # Wait for user to validate before moving on
             cv2.destroyAllWindows()
+
+        if save_imgs:
+                cv2.imwrite(output_visual, reconstructed_mask)
+
+
+def main(mask_dir: str,
+         resize_factor : float = 0.2,
+         dir : Literal['train', 'val', 'both'] = 'both'):
+
+    assert os.path.exists(mask_dir), f"Directory not found: {mask_dir}"
+    
+    mask_list = list_mask_paths(mask_dir)
+    
+    process_masks(mask_list, resize_factor=resize_factor, dir=dir)
+
+    print("Processing Complete")
