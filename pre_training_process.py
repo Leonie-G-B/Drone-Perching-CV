@@ -162,6 +162,7 @@ def convert_yolo_label_to_mask(image_shape, label_file):
 def process_masks(mask_list, output_folder="yolo/dataset/labels", 
                   visualise_img : bool = False, 
                   resize_factor : float = 0.2,
+                  dir : Literal['train', 'val', 'both'] = 'both',
                   save_imgs     : bool = False):
     """Process a list of masks, convert them to YOLO format, validate them visually, and continue on keypress."""
     if not os.path.exists(output_folder):
@@ -206,7 +207,22 @@ def process_masks(mask_list, output_folder="yolo/dataset/labels",
 def main(mask_dir: str,
          resize_factor : float = 0.2,
          dir : Literal['train', 'val', 'both'] = 'both'):
+    """
+    Main function to process the masks into the .txt yolo format.
+    This is setup for one time use, though some small modifications allow use for testing and visualisation for mask validation.
+    For example, by calling list_mask_paths_n_rdom, you can select a random number of masks to process instead of all at once, 
+    and process_masks has an additional optional variable, visualise, which will show the original mask and processed one for reference.
 
+    Args:
+        mask_dir (str): The directory containing the masks to be processed. 
+                        Expected format ends with /yolo/dataset/masks, and then the final dir is determined by the dir argument.
+        resize_factor (float): The factor by which the masks are resized. If not resized, each process will take >20s!
+        dir (Literal['train', 'val', 'both']): The directory to take from. If both, then functions will be processed twice in succession. 
+                                                Options are 'train', 'val', or 'both'. 
+                                                Default is 'both'.
+    """
+
+    mask_dir = os.path.join(mask_dir, dir)
     assert os.path.exists(mask_dir), f"Directory not found: {mask_dir}"
     
     mask_list = list_mask_paths(mask_dir)
