@@ -1,0 +1,7 @@
+path: model/yolo11n-seg.pt
+train: C:/Users/admin01/OneDrive/Documents/UNI/UNI/Y3/RP3/VSCode/SegmentationModel/yolo/dataset/images/train
+val: C:/Users/admin01/OneDrive/Documents/UNI/UNI/Y3/RP3/VSCode/SegmentationModel/yolo/dataset/images/val
+
+#no. and names of classes
+nc: 1
+names: ['tree']
