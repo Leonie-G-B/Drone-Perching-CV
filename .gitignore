@@ -1,0 +1,11 @@
+# Ignore all PNG, JPG, and TXT files
+*.png
+*.jpg
+*.jpeg
+*.txt
+
+# (Optional) Ignore any PNG, JPG, or TXT files inside subdirectories
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.txt
