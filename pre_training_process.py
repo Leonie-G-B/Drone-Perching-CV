@@ -162,9 +162,11 @@ def convert_yolo_label_to_mask(image_shape, label_file):
 def process_masks(mask_list, output_folder="yolo/dataset/labels", 
                   visualise_img : bool = False, 
                   resize_factor : float = 0.2,
-                  dir : Literal['train', 'val', 'both'] = 'both',
+                  dir : Literal['train', 'val'] = 'train',
                   save_imgs     : bool = False):
     """Process a list of masks, convert them to YOLO format, validate them visually, and continue on keypress."""
+
+    output_folder = os.path.join(output_folder, dir)
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -222,11 +224,20 @@ def main(mask_dir: str,
                                                 Default is 'both'.
     """
 
-    mask_dir = os.path.join(mask_dir, dir)
-    assert os.path.exists(mask_dir), f"Directory not found: {mask_dir}"
-    
-    mask_list = list_mask_paths(mask_dir)
-    
-    process_masks(mask_list, resize_factor=resize_factor, dir=dir)
+    dirs_to_process = ['train', 'val'] if dir == 'both' else [dir]
 
-    print("Processing Complete")
+    for sub_dir in dirs_to_process:
+        current_mask_dir = os.path.join(mask_dir, sub_dir)
+        
+        if not os.path.exists(current_mask_dir):
+            raise FileNotFoundError(f"Directory not found: {current_mask_dir}")
+        
+        if not os.listdir(current_mask_dir):
+            raise FileNotFoundError(f"Directory is empty: {current_mask_dir}")
+
+        
+        mask_list = list_mask_paths(current_mask_dir)
+        
+        process_masks(mask_list, resize_factor=resize_factor, dir=sub_dir)
+
+        print(f"Processing Complete for {sub_dir} masks.")
