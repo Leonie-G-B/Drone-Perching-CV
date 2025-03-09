@@ -32,7 +32,7 @@ def get_merge_point_idx(contour1, contour2):
     """Find the closest points between two contours."""
     idx1, idx2 = 0, 0
     min_distance = float('inf')
-    if len(contour1) > 10000: 
+    if len(contour1) > 50000: 
         warnings.warn(f"Contour 1 is large ({len(contour1)})- processing time may be extensive.")
     for i, p1 in enumerate(contour1):
         for j, p2 in enumerate(contour2):
@@ -234,6 +234,7 @@ def main(mask_dir: str,
     dirs_to_process = ['train', 'val'] if dir == 'both' else [dir]
 
     for sub_dir in dirs_to_process:
+        print(f"Beginning processing for {sub_dir} masks")
         current_mask_dir = os.path.join(mask_dir, sub_dir)
         
         if not os.path.exists(current_mask_dir):

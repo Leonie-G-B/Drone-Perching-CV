@@ -6,7 +6,10 @@ from ultralytics import YOLO
 
 
 
-def train_yolo(model_dir: str, yaml_name: str = 'branch_segmentation.yaml',model_name: str = "yolov11n-seg.pt", epochs : int = 10) -> None:
+def train_yolo(model_dir: str = "/models", 
+               model_name: str = "yolov11n-seg.pt", 
+               yaml_name: str = 'branch_segmentation.yaml', 
+               epochs : int = 10) -> None:
     """
     Trains the YOLO model on the dataset.
 
