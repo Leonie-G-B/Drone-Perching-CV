@@ -15,7 +15,7 @@ def main():
                 dir = 'both')
 
     # Train model
-    Train.train_yolo(model_dir = "/models",
+    Train.train_yolo(model_dir = "models",
                      model_name= "yolo11n-seg.pt",
                      yaml_name = 'branch_segmentation.yaml',
                      epochs= 2)

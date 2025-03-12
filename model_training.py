@@ -6,8 +6,8 @@ from ultralytics import YOLO
 
 
 
-def train_yolo(model_dir: str = "/models", 
-               model_name: str = "yolov11n-seg.pt", 
+def train_yolo(model_dir: str = "models", 
+               model_name: str = "yolo11n-seg.pt", 
                yaml_name: str = 'branch_segmentation.yaml', 
                epochs : int = 10) -> None:
     """
