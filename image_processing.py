@@ -45,6 +45,7 @@ class Tree:
             print("Plotting medial axis result.")
             utils.visualise_result(self.medial_axis, 'medial_axis')
 
+    @utils.timeit()
     def section_branches(self):
         
         labels, num = nd.label(self.skeleton, np.ones((3, 3)))
@@ -56,14 +57,16 @@ class Tree:
         # can be changed - need to assess the implications of there being multiple skeletons
 
 
-        skel_points, intersec_pts, skeleton_no_intersec, endpts = find_filpix(1, labels, final=True, debug=False)
+        skel_points, intersec_pts, skeleton_no_intersec, endpts = find_filpix(1, labels, final=True, debug=False, remove_region= True)
         # skeleton_no_intersec is necessary to separate the skeleton into branches
         
         branch_labels, num_branches = nd.label(skeleton_no_intersec, np.ones((3, 3)))
-        branch_coords = {i: np.argwhere(branch_labels == i) for i in range(1, num_branches + 1)}
+        # branch_coords = {i: np.argwhere(branch_labels == i) for i in range(1, num_branches + 1)}
+        branch_coords = [np.argwhere(branch_labels == i) for i in range(1, num_branches + 1)]
 
+        utils.visualise_result(branch_coords, 'branches', img_shape = self.img.shape)
         # At this point the coordinates are separate for each branch but theyre in the wrong order...
-
+    
 
         len(labels)
 
@@ -77,7 +80,7 @@ def perf_medial_axis(binary_mask: np.ndarray) -> np.ndarray:
 
 
 
-def find_filpix(branches, labelfil, final=True, debug=False):
+def find_filpix(branches, labelfil, final=True, debug=False, remove_region : bool = False):
     '''
     MODIFIED SLIGHTLY FROM THE FILFINDER PACKAGE. See: https://github.com/e-koch/FilFinder.
 
@@ -327,8 +330,15 @@ def find_filpix(branches, labelfil, final=True, debug=False):
         arr = np.zeros((labelfil.shape))
         for z in all_pts:
             # print(z) ; print(labelfil[z[1]]); print(labelfil[labelfil.shape[0] - z[1] -1, z[0]])
-            labelfil[labelfil.shape[0] - z[1] -1, z[0]] = 0
-            arr[z[1], z[0]] = 1
+            row, col = labelfil.shape[0] - z[1] - 1 , z[0]
+            if remove_region:
+                # remove a 3x3 pixel region around the intersection point
+                r_min , r_max = max(0, row - 1), min(labelfil.shape[0], row + 2)
+                c_min , c_max = max(0, col - 1), min(labelfil.shape[1], col + 2)
+                labelfil[r_min:r_max, c_min:c_max] = 0
+            else:
+                labelfil[row, col] = 0
+                arr[z[1], z[0]] = 1
         lab, nums = nd.label(arr, np.ones((3,3)))
         for k in range(1, nums + 1):
             objs_pix = np.where(lab == k)
