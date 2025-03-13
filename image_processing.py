@@ -56,7 +56,15 @@ class Tree:
         # can be changed - need to assess the implications of there being multiple skeletons
 
 
-        branch_info = find_filpix(1, labels, final=True, debug=False)
+        skel_points, intersec_pts, skeleton_no_intersec, endpts = find_filpix(1, labels, final=True, debug=False)
+        # skeleton_no_intersec is necessary to separate the skeleton into branches
+        
+        branch_labels, num_branches = nd.label(skeleton_no_intersec, np.ones((3, 3)))
+        branch_coords = {i: np.argwhere(branch_labels == i) for i in range(1, num_branches + 1)}
+
+        # At this point the coordinates are separate for each branch but theyre in the wrong order...
+
+
         len(labels)
 
 
@@ -130,7 +138,7 @@ def find_filpix(branches, labelfil, final=True, debug=False):
         x, y = np.where(labelfil == k)
         for i in range(len(x)):
             if x[i] < labelfil.shape[0] - 1 and y[i] < labelfil.shape[1] - 1:
-                pix.append((x[i], y[i]))
+                pix.append((y[i], labelfil.shape[0] - x[i] - 1))
                 initslices.append(np.array([[labelfil[x[i] - 1, y[i] + 1],
                                              labelfil[x[i], y[i] + 1],
                                              labelfil[x[i] + 1, y[i] + 1]],
@@ -318,8 +326,9 @@ def find_filpix(branches, labelfil, final=True, debug=False):
         # as a single intersection.
         arr = np.zeros((labelfil.shape))
         for z in all_pts:
-            labelfil[z[0], z[1]] = 0
-            arr[z[0], z[1]] = 1
+            # print(z) ; print(labelfil[z[1]]); print(labelfil[labelfil.shape[0] - z[1] -1, z[0]])
+            labelfil[labelfil.shape[0] - z[1] -1, z[0]] = 0
+            arr[z[1], z[0]] = 1
         lab, nums = nd.label(arr, np.ones((3,3)))
         for k in range(1, nums + 1):
             objs_pix = np.where(lab == k)
