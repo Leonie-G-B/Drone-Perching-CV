@@ -132,7 +132,7 @@ def is_blockpoint(vallist):
 ## Img/ results visualisation utils ##
 
 
-def visualise_result(input, category: str) -> None: 
+def visualise_result(input, category: str, img_shape : tuple = None) -> None: 
     """
     Call at any point in the pipeline to visualise the current state. State given by 'category'.
     Note that there is no mechanism by which to ensure the user has given the correct category (this method will likely just fail in that case).
@@ -140,26 +140,30 @@ def visualise_result(input, category: str) -> None:
     'img' - original image (np.ndarray)
     'segmentation' - the output of the segmentation model (np.ndarray)
     'medial_axis' - the output of the medial axis calculation (np.ndarray)
+    'branches' - list of arrays containing branch points
     """
 
     fig, ax = plt.subplots(figsize = (8, 8))
 
     
 
-    if category == 'img': # NEEDS TESTING
+    if category == 'img': # TESTED
         ax.imshow(input)
-    elif category == 'segmentation': # NEEDS TESTING
+    elif category == 'segmentation': # TESTED
         ax.set_title("Segmentation result")
         ax.imshow(input, cmap = 'gray')
-    elif category == 'medial_axis': # NEEDS TESTING
+    elif category == 'medial_axis': # TESTED 
         med_skel = ax.imshow(input, cmap= 'hot', alpha = 0.8)
         cbar = fig.colorbar(med_skel, ax=ax, fraction=0.046, pad=0.04)
         cbar.set_label('Local skeleton width (pixels)', fontsize = 12)
         ax.set_title("Medial axis result")
         ax.set_xticks([])
         ax.set_yticks([])
+    elif category == 'branches': # TESTED
+        for branch in input: 
+            ax.plot(branch[:, 1], img_shape[0] - branch[:, 0])
     else: 
-        print("Invalid category given. \nOptions: 'img', 'segmentation', 'medial_axis'")
+        print("Invalid category given. \nOptions: 'img', 'segmentation', 'medial_axis', 'branches")
 
     return 
     

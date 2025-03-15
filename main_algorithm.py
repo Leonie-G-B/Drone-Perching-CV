@@ -19,7 +19,7 @@ def main():
     Tree = TreeProcessor.Tree(img= example_img, segmentation= example_mask, resize = 0.5)
 
     # Skeletonisation / medial axis 
-    Tree.populate_medial_axis()
+    Tree.populate_medial_axis(verbose = True)
 
 
     # Section brances and prune short branches
