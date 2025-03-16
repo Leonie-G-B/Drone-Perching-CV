@@ -160,8 +160,12 @@ def visualise_result(input, category: str, img_shape : tuple = None) -> None:
         ax.set_xticks([])
         ax.set_yticks([])
     elif category == 'branches': # TESTED
-        for branch in input: 
-            ax.plot(branch[:, 1], img_shape[0] - branch[:, 0])
+        try: 
+            for branch in input: 
+                ax.plot(branch[:, 1], img_shape[0] - branch[:, 0])
+        except IndexError:
+            for branch in input: 
+                ax.plot(branch[:,0][:, 1], img_shape[0] - branch[:,0][:, 0])
     else: 
         print("Invalid category given. \nOptions: 'img', 'segmentation', 'medial_axis', 'branches")
 
