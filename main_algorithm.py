@@ -19,11 +19,18 @@ def main():
     Tree = TreeProcessor.Tree(img= example_img, segmentation= example_mask, resize = 0.5)
 
     # Skeletonisation / medial axis 
-    Tree.populate_medial_axis(verbose = True)
+    Tree.populate_medial_axis(verbose = False)
 
-
-    # Section brances and prune short branches
+    # Section brances and populate data structure with relevant information
     Tree.section_branches()
+
+    # Now can begin eliminating branches that are immediately unsuitable
+
+
+    # Analyse remaining branches/ branch sections for suitability
+
+
+    # Identify best location and show results
 
 
     pass

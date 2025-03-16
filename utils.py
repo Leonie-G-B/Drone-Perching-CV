@@ -39,6 +39,27 @@ def check_contains(tuple, str: str)-> bool:
 
 ## Img processing utils ##
 
+@timeit()
+def determine_branch_label(branch: np.ndarray, labels: np.ndarray) -> int:
+    """
+    Determine the label of the branch given the labels in an image like representation of the skeleton.
+    """
+    
+    # Use a point at the midpoint of the branch to ensure we aren't
+    # at a point in the label where the intersection has been removed
+
+    midpoint_idx = len(branch) // 2
+    midpoint = branch[midpoint_idx]
+    if len(midpoint) ==1: 
+        midpoint = midpoint[0]
+
+    label = labels[midpoint[1], midpoint[0]]
+    if not label: 
+        print("WARNING: NO LABEL FOUND")
+
+    return label
+
+
 
 def load_in_img(img_path: str) -> 'np.ndarray':
     """
@@ -165,7 +186,7 @@ def visualise_result(input, category: str, img_shape : tuple = None) -> None:
                 ax.plot(branch[:, 1], img_shape[0] - branch[:, 0])
         except IndexError:
             for branch in input: 
-                ax.plot(branch[:,0][:, 1], img_shape[0] - branch[:,0][:, 0])
+                ax.plot(branch[:,0][:, 0], img_shape[0] - branch[:,0][:, 1])
     else: 
         print("Invalid category given. \nOptions: 'img', 'segmentation', 'medial_axis', 'branches")
 

@@ -13,6 +13,7 @@ import networkx as nx
 # other useful packages
 import numpy as np
 
+import matplotlib.pyplot as plt # useful during debugging
 
 # This is the location of every processing step post segmentation,
 # excluding the final algorithm, ranking, and results.
@@ -58,18 +59,23 @@ class Tree:
         # from this point onwards, going to assume there is only one skeleton
         # can be changed - need to assess the implications of there being multiple skeletons
 
-        skel_points, intersec_pts, skeleton_no_intersec, endpts = find_filpix(1, labels, final=True, debug=False, remove_region= True)
+        skel_points, intersec_pts, skeleton_no_intersec, endpts = find_filpix(1, labels, final=True, debug=False, remove_region= False)
         # skeleton_no_intersec is necessary to separate the skeleton into branches
         
-        branch_labels, num_branches = nd.label(skeleton_no_intersec, np.ones((3, 3)))
+        labeltree, num_branches = nd.label(skeleton_no_intersec, np.ones((3, 3)))
         # branch_coords = {i: np.argwhere(branch_labels == i) for i in range(1, num_branches + 1)}
         binary_skel_no_intersec  = (skeleton_no_intersec > 0).astype(np.uint8) * 255
-        branches, _ = cv2.findContours(binary_skel_no_intersec, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
+        # branches, _ = cv2.findContours(binary_skel_no_intersec, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        branches, _ = cv2.findContours(binary_skel_no_intersec, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE) #no chain approx otherwise we lose some pixels from each line!
         
+        branch_labels = []
+        for branch in branches: 
+            branch_labels.append(utils.determine_branch_label(branch, labeltree))
+
+
         utils.visualise_result(branches, 'branches', img_shape = self.img.shape)
 
-        create_graph(branches, intersec_pts, endpts)
+        create_graph(labeltree, branches, branch_labels, intersec_pts, endpts)
 
         print("Done")
 
@@ -84,25 +90,81 @@ def perf_medial_axis(binary_mask: np.ndarray) -> np.ndarray:
 
 
 
-def create_graph(branches, intersects, end_pts) -> nx.Graph:
-
+def create_graph(labels, branches, branch_labels, intersects, end_pts) -> nx.Graph:
+    """
+    Converts skeletonized structures into a graph representation.
+    """
 
     G = nx.Graph()
 
-    for branch in branches:
-        branch_length   = cv2.arcLength(branch, closed = False) # we know the branch is not a closed loop!
+    num = len(branches)
+
+    end_nodes = []
+    inter_nodes = []
+    nodes = []
+    edge_list = []
+    branch_lengths = {}
+    
+
+    for n in range(num):
+        inter_nodes_temp = []
+
+        branch = branches[n]
+        branch_label = branch_labels[n]
+
+        if branch_label not in branch_lengths:
+            branch_lengths[branch_label] = cv2.arcLength(branches[n], False)
         
-        # Find the nerest intersec point to the start and end of the branch.
-        # If intersec point is >3 pixels (rounded up from 2sqrt2) away from the branch, we look to see if it is an end point.
+        for i in end_pts:
+            
+            
+            branch_length = branch_lengths[branch_label]
+            end_nodes.append((branch_label, branch_length))
+            nodes.append(branch_label)
 
-        first_point = branch[0][0]
-        last_point  = branch[-1][0]
+            # branch = 
 
+            G.add_node(branch_label, type = 'endpoint', position = i, length=branch_length)
 
+        # Handle intersection nodes
+        # As the intersections have been removed from the labeled array, 
+        # we need to have a 8-connected search radius for the relevant branch label
+        for intersec in intersects:
+            uniqs = set()
+            if isinstance(intersec, tuple): # i.e there is only one point at the intersection
+                intersec = [intersec] # otherwise we are just iterating through the x and y point instead of it as a set
+            for i in intersec:
+                for dx, dy in [(-2, -2), (-2, -1), (-2, 0), (-2, 1), (-2, 2),
+                               (-1, -2), (-1, -1), (-1, 0), (-1, 1), (-1, 2),
+                               ( 0, -2), ( 0, -1),          ( 0, 1), ( 0, 2),
+                               ( 1, -2), ( 1, -1), ( 1, 0), ( 1, 1), ( 1, 2),
+                               ( 2, -2), ( 2, -1), ( 2, 0), ( 2, 1), ( 2, 2)]:
+                # for dx, dy in [(-1, -1), (-1, 0), (-1, 1),
+                #                ( 0, -1),          ( 0, 1),
+                #                ( 1, -1), ( 1, 0), ( 1, 1)]:
+                    neighbour_x = i[0] + dx
+                    neighbour_y = i[1] + dy
+                    if 0 <= neighbour_x < labels.shape[1] and 0 <= neighbour_y < labels[n].shape[0]:
+                        branch_label = labels[neighbour_x, neighbour_y]
+                        if branch_label > 0:
+                            uniqs.add(branch_label)
+            # assert len(uniqs) > 0, "No branch labels found in vicinity. Requires debugging!" 
 
+            inter_nodes.append(list(uniqs))  # Store the unique branch connections
 
+        # Create edges based on intersections
+        edge_list_temp = []
+        for inters in inter_nodes_temp:
+            for branch in inters:
+                for other_branch in inters:
+                    if branch != other_branch:
+                        edge = (branch, other_branch, branch_lengths[branch])
+                        if edge not in edge_list_temp:
+                            edge_list_temp.append(edge)
 
-    pass
+        edge_list.append(edge_list_temp)
+
+    return edge_list, nodes, inter_nodes
 
 
 
@@ -368,7 +430,7 @@ def find_filpix(branches, labelfil, final=True, debug=False, remove_region : boo
                 labelfil[r_min:r_max, c_min:c_max] = 0
             else:
                 labelfil[row, col] = 0
-                arr[z[1], z[0]] = 1
+                arr[labelfil.shape[0] - z[1] - 1, z[0]] = 1
         lab, nums = nd.label(arr, np.ones((3,3)))
         for k in range(1, nums + 1):
             objs_pix = np.where(lab == k)
@@ -389,6 +451,3 @@ def find_filpix(branches, labelfil, final=True, debug=False, remove_region : boo
         print(labelfil)
 
     return fila_pts, inters, labelfil, endpts_return
-
-
-    
