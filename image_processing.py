@@ -56,7 +56,13 @@ class Tree:
         labels, num = nd.label(self.skeleton, np.ones((3, 3)))
 
         if num>1: 
-            print('More than one object found... may cause untested behaviour.') # potential issue - keep an eye on this 
+            # this is the case where there are multiple trees in one image
+            # for now we will just use the first one
+            print("Multiple trees detected. Using the first one.")
+            for row in labels: 
+                for item in row: 
+                    if item>1: 
+                        item == 1
         
         # from this point onwards, going to assume there is only one skeleton
         # can be changed - need to assess the implications of there being multiple skeletons
@@ -65,6 +71,7 @@ class Tree:
         # skeleton_no_intersec is necessary to separate the skeleton into branches
         
         labeltree, num_branches = nd.label(skeleton_no_intersec, np.ones((3, 3)))
+
         # branch_coords = {i: np.argwhere(branch_labels == i) for i in range(1, num_branches + 1)}
         binary_skel_no_intersec  = (skeleton_no_intersec > 0).astype(np.uint8) * 255
         # branches, _ = cv2.findContours(binary_skel_no_intersec, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -111,10 +118,18 @@ class Tree:
         # lets start by just pruning the very small branches, then everything 
         # else is considered at the analysis stage
 
-        labelisofil, edge_list, nodes, inter_nodes, G = prune_graph(
+        labelisofil_pruned, edge_list_pruned, nodes_pruned, inter_nodes_pruned, G_p, pruned_labels = prune_graph(
             G, nodes, edge_list, labeltree, 
-            inter_nodes, loop_edges, length_thresh=0, 
-            max_iter=1)
+            inter_nodes, loop_edges, max_path, 
+            length_thresh= pixel_to_length_ratio * 50, weight_thresh = 0.4,
+            max_iter=50)
+        
+        branch_properties_pruned = branch_properties.copy()
+        for branch in list(branch_properties_pruned.keys()): 
+            if branch in pruned_labels: 
+                branch_properties_pruned.pop(branch)
+        
+        utils.visualise_result(branch_properties, 'branches', img_shape = self.medial_axis.shape)
 
         print("Done")
 
@@ -129,29 +144,13 @@ def perf_medial_axis(binary_mask: np.ndarray) -> np.ndarray:
 
 @utils.timeit()
 def prune_graph(G, nodes, edge_list, labelisofil, inter_nodes,
-                loop_edges, length_thresh=0,
+                loop_edges, max_path , 
+                length_thresh=0, weight_thresh = 0.2,
                 max_iter=1):
     '''
     Function to remove unnecessary branches, while maintaining connectivity
     in the graph. Also updates edge_list, nodes, and inter_nodes.
 
-    Parameters
-    ----------
-    G : list
-        Contains the networkx Graph objects.
-    nodes : list
-        A complete list of all of the nodes.
-    edge_list : list
-        Contains the connectivity information for the graphs.
-    labelisofil : list
-        Contains individual arrays for each skeleton where the
-        branches are labeled and the intersections have been removed.
-    inter_nodes : list
-        Contains intersection nodes with branch labels and lengths.
-    loop_edges : list
-        List of edges that create loops in the graph.
-    length_thresh : int or float
-        Minimum length a branch must be to be kept.
 
     Returns
     -------
@@ -163,8 +162,13 @@ def prune_graph(G, nodes, edge_list, labelisofil, inter_nodes,
         Updated from input.
     inter_nodes : list
         Updated from input.
+    G: nx.Graph
+        Updated from input.
+    removed_labels : list
+        List of labels of branches that have been pruned.
     '''
 
+    removed_labels = []
 
     iterat = 0
     while True:
@@ -176,59 +180,73 @@ def prune_graph(G, nodes, edge_list, labelisofil, inter_nodes,
             G.remove_node(node)
 
         single_connect = [key for key in degree if degree[key] == 1]
-        delete_candidate = list((set(nodes[n]) - set(max_path[n])) & set(single_connect))
+        delete_candidate = list((set(nodes) - set(max_path[0])) & set(single_connect))
 
-        if not delete_candidate and len(loop_edges[n]) == 0:
+        if not delete_candidate and len(loop_edges[0]) == 0:
             break
 
         # Gather edges and their corresponding intensities for pruning
-        edge_candidates = [(edge[2][0], edge) for edge in edge_list[n]
+        edge_candidates = [(edge[2][0], edge) for edge in edge_list[0]
                             if edge[0] in delete_candidate or edge[1] in delete_candidate]
 
         # Add loop edges to candidates
-        edge_candidates += [(edge[2][0], edge) for edge in loop_edges[n]]
+        edge_candidates += [(edge[2][0], edge) for edge in loop_edges[0]]
 
         del_idx = []
         for idx, edge in edge_candidates:
             length = edge[2][1]  # Extract branch length from inter_nodes format
+            weight = edge[2][2]
             
-            criteria = length < length_thresh
+            criteria1 = length < length_thresh
+            criteria2 = weight < weight_thresh
+            criteria = criteria1 & criteria2
 
             if criteria:
-                edge_pts = np.where(labelisofil[n] == edge[2][0])
-                labelisofil[n][edge_pts] = 0  # Remove branch
+                edge_pts = np.where(labelisofil == edge[2][0])
+                # x_pts = edge_pts[0]
+                # y_pts = edge_pts[1]
+
+                removed_labels.append(edge[2][0])
+
+                labelisofil[edge_pts] = 0  # Remove branch
 
                 try:
-                    edge_list[n].remove(edge)
-                    nodes[n].remove(edge[1])
-                    G[n].remove_edge(edge[0], edge[1])
+                    edge_list[0].remove(edge)
+                    nodes.remove(edge[1])
                 except ValueError:
-                    loop_edges[n].remove(edge)
+                    try: 
+                        loop_edges[0].remove(edge)
+                    except ValueError:
+                        print(f"Node not found in edge list or loop list ({edge})")
+                try: 
+                    G.remove_edge(edge[0], edge[1])
+                except nx.NetworkXError:
+                    print(f"Edge not found in graph ({edge})")
 
                 del_idx.append(idx)
 
         # Remove corresponding inter_nodes entries
-        if del_idx:
-            del_idx.sort()
-            for idx in del_idx[::-1]:
-                inter_nodes[n].pop(idx)
+        # if del_idx:
+        #     del_idx.sort()
+        #     for idx in del_idx[::-1]:
+        #         inter_nodes[0].pop(idx)
 
         # Merge nodes if necessary
         while True:
-            degree = dict(G[n].degree())
+            degree = dict(G.degree())
             doub_connect = [key for key in degree if degree[key] == 2]
 
             if not doub_connect:
                 break
 
             for node in doub_connect:
-                G[n] = utils.merge_nodes(node, G[n]) # need to handle metadata !!!!!!!!!!!!!!!!!!!!!!!!
+                G = utils.merge_nodes(node, G) # need to handle metadata !!!!!!!!!!!!!!!!!!!!!!!!
 
         iterat += 1
         if iterat == max_iter:
             break
 
-    return labelisofil, edge_list, nodes, inter_nodes, G
+    return labelisofil, edge_list, nodes, inter_nodes, G, removed_labels
 
 
 
@@ -242,7 +260,7 @@ def create_graph(edge_list, nodes, verbose_nodes)-> nx.Graph:
     G.add_nodes_from(nodes)
     
     for edge in edge_list[0]:
-        G.add_edge(edge[0], edge[1], length = edge[2][1], branch_label = edge[2][0])
+        G.add_edge(edge[0], edge[1], weight = edge[2][2], length = edge[2][1], branch_label = edge[2][0])
 
     paths = dict(nx.shortest_path_length(G))
     values = []
@@ -257,12 +275,12 @@ def create_graph(edge_list, nodes, verbose_nodes)-> nx.Graph:
     start, finish = node_extrema[values.index(max_path_length)]
     extremum.append([start, finish])
 
-    def get_length(pat):
-        return sum([G[x][y]['length'] for x, y in
+    def get_weight(pat):
+        return sum([G[x][y]['weight'] for x, y in
                     zip(pat[:-1], pat[1:])])
 
     all_paths = []
-    all_lengths = []
+    all_weights = []
 
     # Catch the weird edges cases where
     max_npath = 500
@@ -271,7 +289,7 @@ def create_graph(edge_list, nodes, verbose_nodes)-> nx.Graph:
             break
 
         if it > 0:
-            if all_lengths[-1] > get_length(pat):
+            if all_weights[-1] > get_weight(pat):
                 break
 
         if it > max_npath:
@@ -279,6 +297,8 @@ def create_graph(edge_list, nodes, verbose_nodes)-> nx.Graph:
             break
 
         all_paths.append(pat)
+        all_weights.append(get_weight(pat))
+
 
     long_path = all_paths[all_weights.index(max(all_weights))]
 
@@ -314,7 +334,8 @@ def pre_graph(labelisofil, branches, interpts, ends):
     # Create end_nodes, which contains lengths, and nodes, which we will
     # later add in the intersections
     end_nodes.append([(labelisofil[labelisofil.shape[0] - end[1] -1, end[0]],
-                       branches[labelisofil[labelisofil.shape[0] - end[1] -1, end[0]]][1]) # length
+                       branches[labelisofil[labelisofil.shape[0] - end[1] -1, end[0]]][1], # length
+                       branches[labelisofil[labelisofil.shape[0] - end[1] -1, end[0]]][2]) # weighting
                       for end in ends])
     # nodes.append([labelisofil[i[0], i[1]] for i in ends])
 
@@ -329,7 +350,8 @@ def pre_graph(labelisofil, branches, interpts, ends):
         for i in intersec:  
             uniqs = {
                 (labelisofil[i[0] + dx, i[1] + dy],  # branch label
-                branches[labelisofil[i[0] + dx, i[1] + dy]][1])  # length
+                branches[labelisofil[i[0] + dx, i[1] + dy]][1],  # length
+                branches[labelisofil[i[0] + dx, i[1] + dy]][2]) # weighting
                 for dx, dy in [(-1, -1), (-1, 0), (-1, 1),
                             ( 0, -1),          ( 0, 1),
                             ( 1, -1), ( 1, 0), ( 1, 1)]

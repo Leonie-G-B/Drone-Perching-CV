@@ -96,7 +96,6 @@ def decide_branch_weighting(branch_widths: np.ndarray, max_width : float, max_le
 
     weighting = a* (length/max_length) + (1-a) *(in_threshold_proportion * (average_width/max_width))
 
-
     return weighting
 
 @timeit()
@@ -278,7 +277,8 @@ def visualise_result(input, category: str,
 
         if underlay_img: 
             assert img is not None, "No image given to underlay"
-            ax.imshow(img, alpha = 0.6, origin = 'upper')
+            image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
+            ax.imshow(image_rgb, alpha = 0.6, origin = 'upper')
 
         for branch_label in input: 
             pixels = input[branch_label][0]
@@ -291,6 +291,8 @@ def visualise_result(input, category: str,
 
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm_colours)
         plt.colorbar(sm, ax = ax, label="Branch Weight")
+        plt.title("Sectioned tree branches' calculated weightings.")
+        plt.axis('off')
 
     else: 
         print("Invalid category given. \nOptions: 'img', 'segmentation', 'medial_axis', 'branches, 'branch_weightings'")
