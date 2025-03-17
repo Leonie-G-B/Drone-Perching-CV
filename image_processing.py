@@ -12,6 +12,7 @@ import networkx as nx
 
 # other useful packages
 import numpy as np
+import string
 
 import matplotlib.pyplot as plt # useful during debugging
 
@@ -74,6 +75,11 @@ class Tree:
 
 
         # utils.visualise_result(branches, 'branches', img_shape = self.img.shape)
+        branch_properties = {}
+        for branch, branch_lablel in zip(branches, branch_labels): 
+            branch_properties[branch_lablel] = [branch, cv2.arcLength(branch, False)]
+
+        pre_graph(labeltree, branch_properties, intersec_pts, endpts)
 
         create_graph(labeltree, branches, branch_labels, intersec_pts, endpts)
 
@@ -90,6 +96,152 @@ def perf_medial_axis(binary_mask: np.ndarray) -> np.ndarray:
 
 
 
+def pre_graph(labelisofil, branches, interpts, ends):
+    '''
+
+    This function converts the skeletons into a graph object compatible with
+    networkx. The graphs have nodes corresponding to end and
+    intersection points and edges defining the connectivity as the branches
+    with the weights set to the branch length.
+
+    CONTINUE
+
+    '''
+
+
+    end_nodes = []
+    inter_nodes = []
+    nodes = []
+    edge_list = []
+    loop_edges = []
+
+    lengths = []
+    
+
+    # def path_weighting(idx, length, intensity, w=0.5):
+    #     '''
+
+    #     Relative weighting for the shortest path algorithm using the branch
+    #     lengths and the average intensity along the branch.
+
+    #     '''
+    #     if w > 1.0 or w < 0.0:
+    #         raise ValueError(
+    #             "Relative weighting w must be between 0.0 and 1.0.")
+    #     return (1 - w) * (length[idx] / np.sum(length)) + \
+    #         w * (intensity[idx] / np.sum(intensity))
+
+    # lengths = branch_properties["length"]
+    # branch_intensity = branch_properties["intensity"]
+
+    inter_nodes_temp = []
+    # Create end_nodes, which contains lengths, and nodes, which we will
+    # later add in the intersections
+    end_nodes.append([(labelisofil[labelisofil.shape[0] - end[1] -1, end[0]],
+                       branches[labelisofil[labelisofil.shape[0] - end[1] -1, end[0]]][1]) # length
+                      for end in ends])
+                    #    path_weighting(int(labelisofil[n][i[0], i[1]] - 1))) #,
+                    #                   lengths[n],
+                    #                   branch_intensity[n]),
+                    #    lengths[n][int(labelisofil[n][i[0], i[1]] - 1)],,
+
+                    #    branch_intensity[n][int(labelisofil[n][i[0], i[1]] - 1)])
+                    #   for i in ends[n]])
+    # nodes.append([labelisofil[i[0], i[1]] for i in ends])
+
+# Intersection nodes are given by the intersections points of the filament.
+# They are labeled alphabetically (if len(interpts[n])>26,
+# subsequent labels are AA,AB,...).
+# The branch labels attached to each intersection are included for future
+# use.
+    inter_nodes_temp = []
+
+    for intersec in interpts:  # assuming interpts is iterable
+        for i in intersec:  
+            uniqs = {
+                (labelisofil[i[0] + dx, i[1] + dy],  # branch label
+                branches[labelisofil[i[0] + dx, i[1] + dy]][1])  # length
+                for dx, dy in [(-1, -1), (-1, 0), (-1, 1),
+                            ( 0, -1),          ( 0, 1),
+                            ( 1, -1), ( 1, 0), ( 1, 1)]
+                if 0 <= i[0] + dx < labelisofil.shape[1] and 0 <= i[1] + dy < labelisofil.shape[0]
+                and labelisofil[i[0] + dx, i[1] + dy] > 0
+            }
+            inter_nodes_temp.append(list(uniqs))  
+
+    # Add intersection labels
+    inter_nodes.append(list(zip(utils.product_gen(string.ascii_uppercase), inter_nodes_temp)))
+
+    for alpha, node in zip(utils.product_gen(string.ascii_uppercase), inter_nodes_temp):
+        nodes.append(alpha)
+
+
+    for intersec in interpts:
+        
+        for i in intersec:  
+            uniqs = {
+                labelisofil[i[0] + dx, i[1] + dy]
+                for dx, dy in [(-1, -1), (-1, 0), (-1, 1),
+                            ( 0, -1),          ( 0, 1),
+                            ( 1, -1), ( 1, 0), ( 1, 1)]
+                if 0 <= i[0] + dx < labelisofil.shape[1] and 0 <= i[1] + dy < labelisofil.shape[0]
+                and labelisofil[i[0] + dx, i[1] + dy] > 0
+            }
+            inter_nodes_temp.append(list(set(uniqs)))  
+
+    inter_nodes.append(list(zip(utils.product_gen(string.ascii_uppercase), inter_nodes_temp)))
+    
+    for alpha, node in zip(utils.product_gen(string.ascii_uppercase), inter_nodes_temp):
+        nodes.append(alpha)
+          
+    
+    # Edges are created from the information contained in the nodes.
+    edge_list_temp = []
+    loops_temp = []
+    for i, inters in enumerate(inter_nodes):
+        end_match = list(set(inters[1]) & set(end_nodes))
+        for k in end_match:
+            edge_list_temp.append((inters[0], k[0], k))
+
+        for j, inters_2 in enumerate(inter_nodes):
+            if i != j:
+                match = list(set(inters[1]) & set(inters_2[1]))
+                new_edge = None
+                if len(match) == 1:
+                    new_edge = (inters[0], inters_2[0], match[0])
+                elif len(match) > 1:
+                    # Multiple connections (a loop)
+                    multi = [match[l][1] for l in range(len(match))]
+                    keep = multi.index(min(multi))
+                    new_edge = (inters[0], inters_2[0], match[keep])
+
+                    # Keep the other edges information in another list
+                    for jj in range(len(multi)):
+                        if jj == keep:
+                            continue
+                        loop_edge = (inters[0], inters_2[0], match[jj])
+                        dup_check = loop_edge not in loops_temp and \
+                            (loop_edge[1], loop_edge[0], loop_edge[2]) \
+                            not in loops_temp
+                        if dup_check:
+                            loops_temp.append(loop_edge)
+
+                if new_edge is not None:
+                    dup_check = (new_edge[1], new_edge[0], new_edge[2]) \
+                        not in edge_list_temp \
+                        and new_edge not in edge_list_temp
+                    if dup_check:
+                        edge_list_temp.append(new_edge)
+
+    # Remove duplicated edges between intersections
+
+    edge_list.append(edge_list_temp)
+    loop_edges.append(loops_temp)
+
+    return edge_list, nodes, loop_edges
+
+
+
 def create_graph(labels, branches, branch_labels, intersects, end_pts) -> nx.Graph:
     """
     Converts skeletonized structures into a graph representation.
@@ -100,7 +252,6 @@ def create_graph(labels, branches, branch_labels, intersects, end_pts) -> nx.Gra
     end_nodes = {}
     inter_nodes = []
     nodes = []
-    edge_list = []
     branch_lengths = {}
     
     for branch_num, branch in enumerate(branches): 
@@ -115,7 +266,7 @@ def create_graph(labels, branches, branch_labels, intersects, end_pts) -> nx.Gra
 
     # Create end point nodes
     for end_point_label in end_nodes:
-        G.add_node(f"E_{end_point_label}_{end_nodes}", 
+        G.add_node(f"E_{end_point_label}_{end_nodes[end_point_label]}", 
                     label = end_point_label, 
                     type = 'endpoint', 
                     position = end_nodes[end_point_label], 
@@ -126,23 +277,26 @@ def create_graph(labels, branches, branch_labels, intersects, end_pts) -> nx.Gra
     # As the intersections have been removed from the labeled array, 
     # we need to have a 8-connected search radius for the relevant branch label
     intersec_labels = {}
-    
+    intersec_set_temp = set() #use a set so we don't have duplicate entries 
+
     for intersec in intersects:
-        if len(intersec) >1: 
+        if len(intersec) >9: 
             print("pause here")
             # intersec = intersec[0]
-        intersec_set_temp = set() #use a set so we don't have duplicate entries 
         if isinstance(intersec, tuple): # i.e there is only one point at the intersection
             intersec = [intersec] # otherwise we are just iterating through the x and y point instead of it as a set
+
+        intersec_set_temp.clear()
+
         for i in intersec:
-            for dx, dy in [(-2, -2), (-2, -1), (-2, 0), (-2, 1), (-2, 2),
-                            (-1, -2), (-1, -1), (-1, 0), (-1, 1), (-1, 2),
-                            ( 0, -2), ( 0, -1),          ( 0, 1), ( 0, 2),
-                            ( 1, -2), ( 1, -1), ( 1, 0), ( 1, 1), ( 1, 2),
-                            ( 2, -2), ( 2, -1), ( 2, 0), ( 2, 1), ( 2, 2)]:
-            # for dx, dy in [(-1, -1), (-1, 0), (-1, 1),
-            #                ( 0, -1),          ( 0, 1),
-            #                ( 1, -1), ( 1, 0), ( 1, 1)]:
+            # for dx, dy in [(-2, -2), (-2, -1), (-2, 0), (-2, 1), (-2, 2),
+            #                 (-1, -2), (-1, -1), (-1, 0), (-1, 1), (-1, 2),
+            #                 ( 0, -2), ( 0, -1),          ( 0, 1), ( 0, 2),
+            #                 ( 1, -2), ( 1, -1), ( 1, 0), ( 1, 1), ( 1, 2),
+            #                 ( 2, -2), ( 2, -1), ( 2, 0), ( 2, 1), ( 2, 2)]:
+            for dx, dy in [(-1, -1), (-1, 0), (-1, 1),
+                           ( 0, -1),          ( 0, 1),
+                           ( 1, -1), ( 1, 0), ( 1, 1)]:
                 neighbour_x = i[0] + dx
                 neighbour_y = i[1] + dy
                 if 0 <= neighbour_x < labels.shape[1] and 0 <= neighbour_y < labels.shape[0]:
@@ -151,11 +305,14 @@ def create_graph(labels, branches, branch_labels, intersects, end_pts) -> nx.Gra
                         intersec_set_temp.add(branch_label)
             # assert len(intersec_set_temp) > 0, "No branch label found for intersection point. NEEDS DEBUGGING."
 
+        first_pixel = intersec[0]
+
         for found_branch in intersec_set_temp:
             if found_branch in intersec_labels:
-                intersec_labels[found_branch] = list(set(intersec_labels[found_branch] + intersec))
+                intersec_labels[found_branch].append(first_pixel) 
             else:
-                intersec_labels[found_branch] = list(set(intersec))
+                intersec_labels[found_branch] = [first_pixel]
+
 
     # Create intersection nodes
     for intersec_branch_label in intersec_labels:
@@ -171,21 +328,54 @@ def create_graph(labels, branches, branch_labels, intersects, end_pts) -> nx.Gra
     # the length of the branch, adding the edges from end point
     # to intersection, and intersection to intersection (if any)
 
+    edge_list = set()
 
-    # connecting edge and intersections
+    # Edge connections
+    edge_list_temp = []
+    loops_temp = []
+
     for branch_label, end in end_nodes.items():
         if branch_label in intersec_labels:
             for intersec in intersec_labels[branch_label]:
-                edge = (f"E_{branch_label}_{end}", f"I_{branch_label}_{intersec}")
-                edge_list.add(edge)
+                edge = (f"E_{branch_label}_{end}", f"I_{branch_label}_{intersec}", branch_label)
+                edge_list_temp.append(edge)
 
-    # connecting intersections
-    for branch_label, intersec_list in intersec_labels.items():
-        if len(intersec_list) > 1:
-            for i in range(len(intersec_list)):
-                for j in range(i + 1, len(intersec_list)):
-                    edge = (f"I_{branch_label}_{intersec_list[i]}", f"I_{branch_label}_{intersec_list[j]}")
-                    edge_list.add(edge)
+    # Connecting intersection nodes
+    inter_nodes = {branch_label: [(f"I_{branch_label}_{intersec}", intersec_labels[branch_label])] 
+                   for branch_label in intersec_labels}
+
+    for branch_label, inter_list in inter_nodes.items():
+        for i, inters in enumerate(inter_list):
+            for j, inters_2 in enumerate(inter_list):
+                if i != j:
+                    match = list(set(inters[1]) & set(inters_2[1]))  # Find common connections
+
+                    if len(match) == 1:
+                        new_edge = (inters[0], inters_2[0], match[0])
+                    elif len(match) > 1:
+                        # Pick the best connection (shortest length or best intensity)
+                        multi = [branch_lengths[m[0]] for m in match]
+                        keep = multi.index(min(multi))
+                        new_edge = (inters[0], inters_2[0], match[keep])
+
+                        for jj in range(len(multi)):
+                            if jj == keep:
+                                continue
+                            loop_edge = (inters[0], inters_2[0], match[jj])
+                            if loop_edge not in loops_temp and (loop_edge[1], loop_edge[0], loop_edge[2]) not in loops_temp:
+                                loops_temp.append(loop_edge)
+
+                    if new_edge is not None:
+                        if (new_edge[1], new_edge[0], new_edge[2]) not in edge_list_temp and new_edge not in edge_list_temp:
+                            edge_list_temp.append(new_edge)
+
+    # Add edges to the graph
+    for edge in edge_list_temp:
+        G.add_edge(edge[0], edge[1])
+
+
+
+
 
 
 
@@ -210,7 +400,7 @@ def create_graph(labels, branches, branch_labels, intersects, end_pts) -> nx.Gra
                 G.add_edge(f"E_{end_node_label}_{end_point}", f"I_{end_node_label}_{intersec_points}")
             else: 
                 # must go through the pixels of the branch and find the correct order of the edge points! 
-
+                pass
 
     for end_label, end_points in end_nodes.items():
         if end_label in intersec_labels:
