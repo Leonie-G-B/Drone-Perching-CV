@@ -73,7 +73,7 @@ class Tree:
             branch_labels.append(utils.determine_branch_label(branch, labeltree))
 
 
-        utils.visualise_result(branches, 'branches', img_shape = self.img.shape)
+        # utils.visualise_result(branches, 'branches', img_shape = self.img.shape)
 
         create_graph(labeltree, branches, branch_labels, intersec_pts, endpts)
 
@@ -97,76 +97,133 @@ def create_graph(labels, branches, branch_labels, intersects, end_pts) -> nx.Gra
 
     G = nx.Graph()
 
-    num = len(branches)
-
-    end_nodes = []
+    end_nodes = {}
     inter_nodes = []
     nodes = []
     edge_list = []
     branch_lengths = {}
     
+    for branch_num, branch in enumerate(branches): 
+        branch_lengths[branch_labels[branch_num]] = cv2.arcLength(branch, False)
 
-    for n in range(num):
-        inter_nodes_temp = []
+    # END POINTS
+    for end in end_pts:
+        # identify the branch label
+        branch_label = labels[labels.shape[0] - end[1] -1, end[0]]
+        end_nodes[branch_label] = end
+        # all edge points are named with the convention E_{branch_label}
 
-        branch = branches[n]
-        branch_label = branch_labels[n]
+    # Create end point nodes
+    for end_point_label in end_nodes:
+        G.add_node(f"E_{end_point_label}_{end_nodes}", 
+                    label = end_point_label, 
+                    type = 'endpoint', 
+                    position = end_nodes[end_point_label], 
+                    length= branch_lengths[end_point_label]) 
 
-        if branch_label not in branch_lengths:
-            branch_lengths[branch_label] = cv2.arcLength(branches[n], False)
+    
+    # INTERSEC POINTS
+    # As the intersections have been removed from the labeled array, 
+    # we need to have a 8-connected search radius for the relevant branch label
+    intersec_labels = {}
+    
+    for intersec in intersects:
+        if len(intersec) >1: 
+            print("pause here")
+            # intersec = intersec[0]
+        intersec_set_temp = set() #use a set so we don't have duplicate entries 
+        if isinstance(intersec, tuple): # i.e there is only one point at the intersection
+            intersec = [intersec] # otherwise we are just iterating through the x and y point instead of it as a set
+        for i in intersec:
+            for dx, dy in [(-2, -2), (-2, -1), (-2, 0), (-2, 1), (-2, 2),
+                            (-1, -2), (-1, -1), (-1, 0), (-1, 1), (-1, 2),
+                            ( 0, -2), ( 0, -1),          ( 0, 1), ( 0, 2),
+                            ( 1, -2), ( 1, -1), ( 1, 0), ( 1, 1), ( 1, 2),
+                            ( 2, -2), ( 2, -1), ( 2, 0), ( 2, 1), ( 2, 2)]:
+            # for dx, dy in [(-1, -1), (-1, 0), (-1, 1),
+            #                ( 0, -1),          ( 0, 1),
+            #                ( 1, -1), ( 1, 0), ( 1, 1)]:
+                neighbour_x = i[0] + dx
+                neighbour_y = i[1] + dy
+                if 0 <= neighbour_x < labels.shape[1] and 0 <= neighbour_y < labels.shape[0]:
+                    branch_label = labels[neighbour_x, neighbour_y]
+                    if branch_label > 0:
+                        intersec_set_temp.add(branch_label)
+            # assert len(intersec_set_temp) > 0, "No branch label found for intersection point. NEEDS DEBUGGING."
+
+        for found_branch in intersec_set_temp:
+            if found_branch in intersec_labels:
+                intersec_labels[found_branch] = list(set(intersec_labels[found_branch] + intersec))
+            else:
+                intersec_labels[found_branch] = list(set(intersec))
+
+    # Create intersection nodes
+    for intersec_branch_label in intersec_labels:
+        for intersec in intersec_labels[intersec_branch_label]:
+            G.add_node(f"I_{intersec_branch_label}_{intersec}", 
+                       label = intersec_branch_label,
+                       type = 'intersection', 
+                       position = intersec,
+                       length = branch_lengths[intersec_branch_label])
+
+    # Now add edges
+    # start by locating the end points and then iterating along
+    # the length of the branch, adding the edges from end point
+    # to intersection, and intersection to intersection (if any)
+
+
+    # connecting edge and intersections
+    for branch_label, end in end_nodes.items():
+        if branch_label in intersec_labels:
+            for intersec in intersec_labels[branch_label]:
+                edge = (f"E_{branch_label}_{end}", f"I_{branch_label}_{intersec}")
+                edge_list.add(edge)
+
+    # connecting intersections
+    for branch_label, intersec_list in intersec_labels.items():
+        if len(intersec_list) > 1:
+            for i in range(len(intersec_list)):
+                for j in range(i + 1, len(intersec_list)):
+                    edge = (f"I_{branch_label}_{intersec_list[i]}", f"I_{branch_label}_{intersec_list[j]}")
+                    edge_list.add(edge)
+
+
+
+    for end_node_label, end_point in end_nodes.items():
+        branch_pix = branches[branch_labels.index(end_node_label)]
+        equiv_pixs = [branch_pix[:,0][:,0], labels.shape[0] - 1 - branch_pix[:,0][:,1]]
+        first_point = (equiv_pixs[0][0], equiv_pixs[1][0])
+        last_point = (equiv_pixs[0][-1], equiv_pixs[1][-1])
+
+        # identify if the edge is at the start or end of the branch
+        if not end_point == first_point:
+            # reverse the branch
+            equiv_pixs = [equiv_pixs[0][::-1], equiv_pixs[1][::-1]]
+            first_point = (equiv_pixs[0][0], equiv_pixs[1][0])
+            last_point = (equiv_pixs[0][-1], equiv_pixs[1][-1])
         
-        for i in end_pts:
-            
-            
-            branch_length = branch_lengths[branch_label]
-            end_nodes.append((branch_label, branch_length))
-            nodes.append(branch_label)
+        # Now check for intersection points along this branch 
 
-            # branch = 
+        for intersec_points in intersec_labels[end_node_label]:
+            if len(intersec_points) == 1: 
+                # perfect - just add the edge point between the end and intersection
+                G.add_edge(f"E_{end_node_label}_{end_point}", f"I_{end_node_label}_{intersec_points}")
+            else: 
+                # must go through the pixels of the branch and find the correct order of the edge points! 
 
-            G.add_node(branch_label, type = 'endpoint', position = i, length=branch_length)
 
-        # Handle intersection nodes
-        # As the intersections have been removed from the labeled array, 
-        # we need to have a 8-connected search radius for the relevant branch label
-        for intersec in intersects:
-            uniqs = set()
-            if isinstance(intersec, tuple): # i.e there is only one point at the intersection
-                intersec = [intersec] # otherwise we are just iterating through the x and y point instead of it as a set
-            for i in intersec:
-                for dx, dy in [(-2, -2), (-2, -1), (-2, 0), (-2, 1), (-2, 2),
-                               (-1, -2), (-1, -1), (-1, 0), (-1, 1), (-1, 2),
-                               ( 0, -2), ( 0, -1),          ( 0, 1), ( 0, 2),
-                               ( 1, -2), ( 1, -1), ( 1, 0), ( 1, 1), ( 1, 2),
-                               ( 2, -2), ( 2, -1), ( 2, 0), ( 2, 1), ( 2, 2)]:
-                # for dx, dy in [(-1, -1), (-1, 0), (-1, 1),
-                #                ( 0, -1),          ( 0, 1),
-                #                ( 1, -1), ( 1, 0), ( 1, 1)]:
-                    neighbour_x = i[0] + dx
-                    neighbour_y = i[1] + dy
-                    if 0 <= neighbour_x < labels.shape[1] and 0 <= neighbour_y < labels[n].shape[0]:
-                        branch_label = labels[neighbour_x, neighbour_y]
-                        if branch_label > 0:
-                            uniqs.add(branch_label)
-            # assert len(uniqs) > 0, "No branch labels found in vicinity. Requires debugging!" 
+    for end_label, end_points in end_nodes.items():
+        if end_label in intersec_labels:
+            if len(intersec_labels[end_label]) == 1: 
+                G.add_edge(f"E_{end_label}_{end_points}", f"I_{end_label}_{intersec_labels[end_label]}")
 
-            inter_nodes.append(list(uniqs))  # Store the unique branch connections
-
-        # Create edges based on intersections
-        edge_list_temp = []
-        for inters in inter_nodes_temp:
-            for branch in inters:
-                for other_branch in inters:
-                    if branch != other_branch:
-                        edge = (branch, other_branch, branch_lengths[branch])
-                        if edge not in edge_list_temp:
-                            edge_list_temp.append(edge)
-
-        edge_list.append(edge_list_temp)
+    for end_label, end_points in end_nodes.items():
+        if end_label in intersec_labels:  # Only connect if the end_label exists in intersection labels
+                for intersec_point in intersec_labels[end_label]:
+                    # Add edge between the end point and intersection point
+                    G.add_edge(f"E_{end_label}_{end_points}", f"I_{end_label}_{intersec_point}")
 
     return edge_list, nodes, inter_nodes
-
-
 
 
 
