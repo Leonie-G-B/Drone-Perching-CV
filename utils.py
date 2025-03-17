@@ -7,6 +7,7 @@ import time
 from functools import wraps 
 import numpy as np
 import matplotlib.pyplot as plt
+import itertools
 
 
 ### Misc util funcs ###
@@ -38,6 +39,46 @@ def check_contains(tuple, str: str)-> bool:
     return any([t in str for t in tuple])
 
 ## Img processing utils ##
+
+
+
+def get_branch_width(branch_pixels, medial_axis) -> np.ndarray:
+
+    branch_width = []
+
+    for branch_pixel in branch_pixels: 
+        # identify the width at this point 
+        width = medial_axis[branch_pixel[0][1], branch_pixel[0][0]]
+        assert width, "No width found at branch point"
+        branch_width.append(width)  
+
+
+    return branch_width
+
+
+def decide_branch_weighting(branch_widths: np.ndarray, max_width : float, max_length: float ,length: float,
+                            pixel_to_length_ratio: float,
+                            width_ideal_threshold: tuple = (30, 110),
+                            length_to_width_bias : float = 0.6) -> float:
+    
+    a = length_to_width_bias
+
+    width_threshold_pixels = (pixel_to_length_ratio * width_ideal_threshold[0], pixel_to_length_ratio * width_ideal_threshold[1])
+
+    weighting = 0
+
+    # proportion of branch that is within threshold 
+    in_threshold = sum(width_threshold_pixels[0] <= w <=width_threshold_pixels[1] 
+                       for w in branch_widths)
+    total        = len(branch_widths)
+    in_threshold_proportion = in_threshold/total
+
+    average_width =  sum(branch_widths) / total
+
+    weighting = a* (length/max_length) + (1-a) *(in_threshold_proportion * (average_width/max_width))
+
+
+    return weighting
 
 @timeit()
 def determine_branch_label(branch: np.ndarray, labels: np.ndarray) -> int:
@@ -92,6 +133,13 @@ def shifter(l, n):
 
 def distance(x, x1, y, y1):
     return np.sqrt((x - x1) ** 2.0 + (y - y1) ** 2.0)
+
+
+def product_gen(n):
+    for r in itertools.count(1):
+        for i in itertools.product(n, repeat=r):
+            yield "".join(i)
+
 
 def is_tpoint(vallist):
     '''
@@ -150,10 +198,27 @@ def is_blockpoint(vallist):
     return False
 
 
+def merge_nodes(node, G):
+    '''
+    Combine a node into its neighbors.
+    '''
+
+    neigb = list(G[node])
+
+    if len(neigb) != 2:
+        return G
+
+    G.remove_node(node)
+    G.add_edge(neigb[0], neigb[1])
+
+    return G
+
+
 ## Img/ results visualisation utils ##
 
 
-def visualise_result(input, category: str, img_shape : tuple = None) -> None: 
+def visualise_result(input, category: str, 
+                     img_shape : tuple = None, underlay_img : bool = False, img: np.ndarray = None) -> None: 
     """
     Call at any point in the pipeline to visualise the current state. State given by 'category'.
     Note that there is no mechanism by which to ensure the user has given the correct category (this method will likely just fail in that case).
@@ -162,11 +227,11 @@ def visualise_result(input, category: str, img_shape : tuple = None) -> None:
     'segmentation' - the output of the segmentation model (np.ndarray)
     'medial_axis' - the output of the medial axis calculation (np.ndarray)
     'branches' - list of arrays containing branch points
+    'branch_weightings' - dictionary containing branch information (inluding all branch pixels and their weightings)
     """
 
     fig, ax = plt.subplots(figsize = (8, 8))
 
-    
 
     if category == 'img': # TESTED
         ax.imshow(input)
@@ -187,8 +252,29 @@ def visualise_result(input, category: str, img_shape : tuple = None) -> None:
         except IndexError:
             for branch in input: 
                 ax.plot(branch[:,0][:, 0], img_shape[0] - branch[:,0][:, 1])
+    elif category == 'branch_weightings':
+        cmap = plt.get_cmap('viridis')
+        norm_colours = plt.Normalize(vmin = 0, vmax = 1)
+        # the input is the branch_properties variable
+
+        if underlay_img: 
+            assert img is not None, "No image given to underlay"
+            ax.imshow(img, alpha = 0.6, origin = 'upper')
+
+        for branch_label in input: 
+            pixels = input[branch_label][0]
+            weighting = input[branch_label][2]
+            colour = cmap(norm_colours(weighting))
+            if underlay_img:
+                ax.plot(pixels[:, 0][:,0], pixels[:, 0][:, 1], color = colour)
+            else: 
+                ax.plot( pixels[:, 0][:, 0], img_shape[0] -pixels[:, 0][:, 1], color = colour, )
+
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm_colours)
+        plt.colorbar(sm, ax = ax, label="Branch Weight")
+
     else: 
-        print("Invalid category given. \nOptions: 'img', 'segmentation', 'medial_axis', 'branches")
+        print("Invalid category given. \nOptions: 'img', 'segmentation', 'medial_axis', 'branches, 'branch_weightings'")
 
     return 
     
