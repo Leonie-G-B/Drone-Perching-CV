@@ -1,8 +1,10 @@
-# Ignore all PNG, JPG, and TXT files
+# Ignore all PNG, JPG, pycache, and TXT files
 *.png
 *.jpg
 *.jpeg
 *.txt
+*.pyc
+
 
 # (Optional) Ignore any PNG, JPG, or TXT files inside subdirectories
 **/*.png
