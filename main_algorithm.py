@@ -12,11 +12,20 @@ def main():
     #### In the meantime while the model is being trained, 
     #### we can just laod in a segmentation example 
     #### and use that to test the rest of the pipeline
-    example_img  = load_in_img("yolo/dataset/images/train/Albizia julibrissin_branch_1 (2).jpg")
-    example_mask = load_in_img("yolo/dataset/masks/train/Albizia julibrissin_branch_1 (2).png")
+
+    img_loc, mask_loc = load_in_rdom_imgs("yolo/dataset/images/train", "yolo/dataset/masks/train")
+
+    # example_img  = load_in_img(IMG)
+    # example_mask = load_in_img(MASK)
+    example_img  = load_in_img(img_loc)
+    example_mask = load_in_img(mask_loc)
+
 
     # Initialise the tree object
-    Tree = TreeProcessor.Tree(img= example_img, segmentation= example_mask, resize = 0.5)
+    # Tree = TreeProcessor.Tree(img= example_img, segmentation= example_mask, resize = 1)
+    Tree = TreeProcessor.Tree(img= example_img, segmentation= example_mask, resize = 1.0)
+
+
 
     # Skeletonisation / medial axis 
     Tree.populate_medial_axis(verbose = False)

@@ -8,6 +8,7 @@ from functools import wraps
 import numpy as np
 import matplotlib.pyplot as plt
 import itertools
+import random
 
 
 ### Misc util funcs ###
@@ -37,6 +38,24 @@ def timeit():
 
 def check_contains(tuple, str: str)-> bool:
     return any([t in str for t in tuple])
+
+
+
+
+def load_in_rdom_imgs(img_dir: str, mask_dir: str) -> np.ndarray:
+
+    os.listdir(img_dir)
+
+    img_loc = os.path.join(img_dir, random.choice(os.listdir(img_dir)))
+
+    # mask is in the form .png
+    mask_loc = os.path.join(mask_dir, os.path.basename(img_loc).replace(".jpg",".png"))
+
+    assert os.path.exists(img_loc), f"Image file {img_loc} not found."
+    assert os.path.exists(mask_loc), f"Mask file {mask_loc} not found."
+
+    return img_loc, mask_loc
+
 
 ## Img processing utils ##
 
