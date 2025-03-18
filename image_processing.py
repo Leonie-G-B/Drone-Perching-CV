@@ -109,29 +109,37 @@ class Tree:
                                                 length , #branch length
                                                 weighting] 
 
-        utils.visualise_result(branch_properties, 'branch_weightings', img_shape = self.medial_axis.shape,
-                               underlay_img=True, img = self.img)
+        # utils.visualise_result(branch_properties, 'branch_weightings', img_shape = self.medial_axis.shape,
+        #                        underlay_img=True, img = self.img)
 
         edge_list, nodes, loop_edges, inter_nodes = pre_graph(labeltree, branch_properties, intersec_pts, endpts)
         G, max_path = create_graph(edge_list, nodes, inter_nodes)
+        utils.visualise_result(G, 'graph', nodes=nodes )
 
         # lets start by just pruning the very small branches, then everything 
         # else is considered at the analysis stage
 
         labelisofil_pruned, edge_list_pruned, nodes_pruned, inter_nodes_pruned, G_p, pruned_labels = prune_graph(
-            G, nodes, edge_list, labeltree, 
+            G.copy(), nodes.copy(), edge_list.copy(), labeltree, 
             inter_nodes, loop_edges, max_path, 
             length_thresh= pixel_to_length_ratio * 50, weight_thresh = 0.4,
             max_iter=50)
+        
+        utils.visualise_result(G_p, 'graph', nodes=nodes )
+
         
         branch_properties_pruned = branch_properties.copy()
         for branch in list(branch_properties_pruned.keys()): 
             if branch in pruned_labels: 
                 branch_properties_pruned.pop(branch)
         
-        utils.visualise_result(branch_properties, 'branches', img_shape = self.medial_axis.shape)
+        utils.visualise_result(branch_properties_pruned, 'branches', img_shape = self.medial_axis.shape)
 
-        print("Done")
+        self.Graph = G_p
+        self.branch_pixels = branch_properties
+        self.node_info = nodes
+
+        print("Completed sectioning, graph defining, and pruning.")
 
 
 @utils.timeit()
@@ -180,6 +188,7 @@ def prune_graph(G, nodes, edge_list, labelisofil, inter_nodes,
             G.remove_node(node)
 
         single_connect = [key for key in degree if degree[key] == 1]
+
         delete_candidate = list((set(nodes) - set(max_path[0])) & set(single_connect))
 
         if not delete_candidate and len(loop_edges[0]) == 0:
@@ -199,7 +208,8 @@ def prune_graph(G, nodes, edge_list, labelisofil, inter_nodes,
             
             criteria1 = length < length_thresh
             criteria2 = weight < weight_thresh
-            criteria = criteria1 & criteria2
+            # criteria = criteria1 & criteria2
+            criteria = criteria1 and criteria2
 
             if criteria:
                 edge_pts = np.where(labelisofil == edge[2][0])
@@ -212,16 +222,20 @@ def prune_graph(G, nodes, edge_list, labelisofil, inter_nodes,
 
                 try:
                     edge_list[0].remove(edge)
-                    nodes.remove(edge[1])
+                    nodes.pop(edge[1])
                 except ValueError:
                     try: 
                         loop_edges[0].remove(edge)
                     except ValueError:
                         print(f"Node not found in edge list or loop list ({edge})")
+                except KeyError:
+                    print(f"Edge not found in nodes ({edge[1]})")
                 try: 
                     G.remove_edge(edge[0], edge[1])
                 except nx.NetworkXError:
                     print(f"Edge not found in graph ({edge})")
+                else: 
+                    print(f"Removed edge from graph: {edge}")
 
                 del_idx.append(idx)
 
@@ -257,7 +271,7 @@ def create_graph(edge_list, nodes, verbose_nodes)-> nx.Graph:
     extremum = []
 
     # add nodes
-    G.add_nodes_from(nodes)
+    G.add_nodes_from(nodes.keys())
     
     for edge in edge_list[0]:
         G.add_edge(edge[0], edge[1], weight = edge[2][2], length = edge[2][1], branch_label = edge[2][0])
@@ -324,7 +338,7 @@ def pre_graph(labelisofil, branches, interpts, ends):
 
     end_nodes = []
     inter_nodes = []
-    nodes = []
+    nodes = {}
     edge_list = []
     loop_edges = []
 
@@ -338,6 +352,7 @@ def pre_graph(labelisofil, branches, interpts, ends):
                        branches[labelisofil[labelisofil.shape[0] - end[1] -1, end[0]]][2]) # weighting
                       for end in ends])
     # nodes.append([labelisofil[i[0], i[1]] for i in ends])
+    nodes = {labelisofil[labelisofil.shape[0] - end[1] -1, end[0]]: end for end in ends}
 
     # Intersection nodes are given by the intersections points of the filament.
     # They are labeled alphabetically (if len(interpts[n])>26,
@@ -345,6 +360,7 @@ def pre_graph(labelisofil, branches, interpts, ends):
     # The branch labels attached to each intersection are included for future
     # use.
     inter_nodes_temp = []
+    positions = []
 
     for intersec in interpts:  # assuming interpts is iterable
         for i in intersec:  
@@ -352,21 +368,27 @@ def pre_graph(labelisofil, branches, interpts, ends):
                 (labelisofil[i[0] + dx, i[1] + dy],  # branch label
                 branches[labelisofil[i[0] + dx, i[1] + dy]][1],  # length
                 branches[labelisofil[i[0] + dx, i[1] + dy]][2]) # weighting
-                for dx, dy in [(-1, -1), (-1, 0), (-1, 1),
-                            ( 0, -1),          ( 0, 1),
-                            ( 1, -1), ( 1, 0), ( 1, 1)]
+                # for dx, dy in [(-1, -1), (-1, 0), (-1, 1),
+                #             ( 0, -1),          ( 0, 1),
+                #             ( 1, -1), ( 1, 0), ( 1, 1)]
+                for dx, dy in [(-2, -2), (-2, -1), (-2, 0), (-2, 1), (-2, 2),
+                            (-1, -2), (-1, -1), (-1, 0), (-1, 1), (-1, 2),
+                            ( 0, -2), ( 0, -1),          ( 0, 1), ( 0, 2),
+                            ( 1, -2), ( 1, -1), ( 1, 0), ( 1, 1), ( 1, 2),
+                            ( 2, -2), ( 2, -1), ( 2, 0), ( 2, 1), ( 2, 2)]
                 if 0 <= i[0] + dx < labelisofil.shape[1] and 0 <= i[1] + dy < labelisofil.shape[0]
                 and labelisofil[i[0] + dx, i[1] + dy] > 0
             }
             if not len(uniqs):
                 print("WARNING: Did not find and branches at intersection")
             inter_nodes_temp.append(list(uniqs))
+            positions.append((i[1], labelisofil.shape[0] - 1 - i[0]))
 
     # Add intersection labels
     inter_nodes.append(list(zip(utils.product_gen(string.ascii_uppercase), inter_nodes_temp)))
 
-    for alpha, node in zip(utils.product_gen(string.ascii_uppercase), inter_nodes_temp):
-        nodes.append(alpha)
+    for alpha, pos in zip(utils.product_gen(string.ascii_uppercase), positions):
+        nodes[alpha] = pos
 
     # Edges are created from the information contained in the nodes.
     edge_list_temp = []

@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import itertools
 import random
-
+import networkx as nx
 
 ### Misc util funcs ###
 
@@ -236,16 +236,18 @@ def merge_nodes(node, G):
 
 
 def visualise_result(input, category: str, 
-                     img_shape : tuple = None, underlay_img : bool = False, img: np.ndarray = None) -> None: 
+                     img_shape : tuple = None, underlay_img : bool = False, img: np.ndarray = None, nodes: dict = None) -> None: 
     """
     Call at any point in the pipeline to visualise the current state. State given by 'category'.
     Note that there is no mechanism by which to ensure the user has given the correct category (this method will likely just fail in that case).
     Current supported list of inputs: 
-    'img' - original image (np.ndarray)
-    'segmentation' - the output of the segmentation model (np.ndarray)
+    'img' - original image (np.ndarray).
+    'segmentation' - the output of the segmentation model (np.ndarray).
     'medial_axis' - the output of the medial axis calculation (np.ndarray)
-    'branches' - list of arrays containing branch points
-    'branch_weightings' - dictionary containing branch information (inluding all branch pixels and their weightings)
+    'branches' - list of arrays containing branch points.
+    'branch_weightings' - dictionary containing branch information (inluding all branch pixels and their weightings).
+    'nodes' - list of nodes.
+    'graph' - networkx graph object. Include node dict for labelling and positioning.
     """
 
     fig, ax = plt.subplots(figsize = (8, 8))
@@ -264,12 +266,17 @@ def visualise_result(input, category: str,
         ax.set_xticks([])
         ax.set_yticks([])
     elif category == 'branches': # TESTED
-        try: 
-            for branch in input: 
-                ax.plot(branch[:, 1], img_shape[0] - branch[:, 0])
-        except IndexError:
-            for branch in input: 
-                ax.plot(branch[:,0][:, 0], img_shape[0] - branch[:,0][:, 1])
+        if type(input) == dict:
+            for branch in input.values():
+                banch_pixels = branch[0]
+                ax.plot(banch_pixels[:, 0][:, 0], img_shape[0] - banch_pixels[:, 0][:, 1])
+        else:
+            try: 
+                for branch in input: 
+                    ax.plot(branch[:, 1], img_shape[0] - branch[:, 0])
+            except IndexError:
+                for branch in input: 
+                    ax.plot(branch[:,0][:, 0], img_shape[0] - branch[:,0][:, 1])
     elif category == 'branch_weightings':
         cmap = plt.get_cmap('viridis')
         norm_colours = plt.Normalize(vmin = 0, vmax = 1)
@@ -293,9 +300,20 @@ def visualise_result(input, category: str,
         plt.colorbar(sm, ax = ax, label="Branch Weight")
         plt.title("Sectioned tree branches' calculated weightings.")
         plt.axis('off')
-
+    elif category == 'nodes': 
+        if underlay_img: 
+            assert img is not None, "No image given to underlay"
+            image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
+            ax.imshow(image_rgb, alpha = 0.6, origin = 'upper')
+        for node in input: 
+            ax.scatter(node[0], img_shape[0] - node[1], 'ro')
+    elif category == 'graph':
+        if nodes: 
+            nx.draw(input , pos = nodes, with_labels = True)
+        else: 
+            nx.draw(input)
     else: 
-        print("Invalid category given. \nOptions: 'img', 'segmentation', 'medial_axis', 'branches, 'branch_weightings'")
+        print("Invalid category given. \nOptions: 'img', 'segmentation', 'medial_axis', 'branches, 'branch_weightings', 'nodes', 'graph'")
 
     return 
     
