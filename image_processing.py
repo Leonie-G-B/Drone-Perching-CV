@@ -51,8 +51,9 @@ class Tree:
             utils.visualise_result(self.medial_axis, 'medial_axis')
 
     @utils.timeit()
-    def section_branches(self, pixel_to_length_ratio: float = None):
-        
+    def section_branches(self, pixel_to_length_ratio: float = None, verbose: bool = False):
+
+
         labels, num = nd.label(self.skeleton, np.ones((3, 3)))
 
         if num>1: 
@@ -90,18 +91,22 @@ class Tree:
             trunk_est_width = 200 #mm
             pixel_to_length_ratio = max_width / trunk_est_width
 
-        # utils.visualise_result(branches, 'branches', img_shape = self.img.shape)
+        if verbose:
+            utils.visualise_result(branches, 'branches', img_shape = self.img.shape,
+                                   title = 'Tree branches (before pruning)')
 
         branch_lengths = {branch_label: cv2.arcLength(branch, False) 
                           for branch, branch_label in zip(branches, branch_labels)}
         max_length = max(branch_lengths.values())
         
+        branch_widths = {}
         branch_properties = {}
         for branch, branch_lablel in zip(branches, branch_labels): 
             length = branch_lengths[branch_lablel]
-            branch_widths = utils.get_branch_width(branch, self.medial_axis)
+            branch_width = utils.get_branch_width(branch, self.medial_axis)
+            branch_widths[branch_lablel] = branch_width
 
-            weighting = utils.decide_branch_weighting(branch_widths, max_width, max_length, length, 
+            weighting = utils.decide_branch_weighting(branch_width, max_width, max_length, length, 
                                                       pixel_to_length_ratio,
                                                       width_ideal_threshold= (30, 110))
 
@@ -109,12 +114,16 @@ class Tree:
                                                 length , #branch length
                                                 weighting] 
 
-        # utils.visualise_result(branch_properties, 'branch_weightings', img_shape = self.medial_axis.shape,
-        #                        underlay_img=True, img = self.img)
+        if verbose: 
+            utils.visualise_result(branch_properties, 'branch_weightings', img_shape = self.medial_axis.shape,
+                                underlay_img=True, img = self.img)
 
         edge_list, nodes, loop_edges, inter_nodes = pre_graph(labeltree, branch_properties, intersec_pts, endpts)
         G, max_path = create_graph(edge_list, nodes, inter_nodes)
-        utils.visualise_result(G, 'graph', nodes=nodes )
+
+        if verbose:
+            utils.visualise_result(G, 'graph', nodes=nodes,
+                                   title = 'Graph representation of bodes before pruning.')
 
         # lets start by just pruning the very small branches, then everything 
         # else is considered at the analysis stage
@@ -125,7 +134,9 @@ class Tree:
             length_thresh= pixel_to_length_ratio * 50, weight_thresh = 0.4,
             max_iter=50)
         
-        utils.visualise_result(G_p, 'graph', nodes=nodes )
+        if verbose:
+            utils.visualise_result(G_p, 'graph', nodes=nodes ,
+                                   title = 'Graph representation of nodes after pruning.')
 
         
         branch_properties_pruned = branch_properties.copy()
@@ -133,13 +144,38 @@ class Tree:
             if branch in pruned_labels: 
                 branch_properties_pruned.pop(branch)
         
-        utils.visualise_result(branch_properties_pruned, 'branches', img_shape = self.medial_axis.shape)
+        if verbose: 
+            utils.visualise_result(branch_properties_pruned, 'branches', img_shape = self.medial_axis.shape,
+                                   title = 'Tree branches (after pruning)')
 
         self.Graph = G_p
         self.branch_pixels = branch_properties
+        self.branch_widths = branch_widths
         self.node_info = nodes
 
         print("Completed sectioning, graph defining, and pruning.")
+
+
+    def analyse_branches(self):
+
+        # This is where the branch analysis happens
+
+        branches = self.branch_pixels
+        branch_widths = self.branch_widths
+        G = self.Graph
+
+        for branch in branches: 
+
+            # Analyse the local angle of the branch
+            
+
+            # Analyse the local width of the branch 
+
+            # Analyse the branch curvature
+
+
+
+            pass
 
 
 @utils.timeit()
@@ -154,7 +190,7 @@ def perf_medial_axis(binary_mask: np.ndarray) -> np.ndarray:
 def prune_graph(G, nodes, edge_list, labelisofil, inter_nodes,
                 loop_edges, max_path , 
                 length_thresh=0, weight_thresh = 0.2,
-                max_iter=1):
+                max_iter=1, verbose : bool = False):
     '''
     Function to remove unnecessary branches, while maintaining connectivity
     in the graph. Also updates edge_list, nodes, and inter_nodes.
@@ -227,15 +263,19 @@ def prune_graph(G, nodes, edge_list, labelisofil, inter_nodes,
                     try: 
                         loop_edges[0].remove(edge)
                     except ValueError:
-                        print(f"Node not found in edge list or loop list ({edge})")
+                        if verbose: 
+                            print(f"Node not found in edge list or loop list ({edge})")
                 except KeyError:
-                    print(f"Edge not found in nodes ({edge[1]})")
+                    if verbose: 
+                        print(f"Edge not found in nodes ({edge[1]})")
                 try: 
                     G.remove_edge(edge[0], edge[1])
                 except nx.NetworkXError:
-                    print(f"Edge not found in graph ({edge})")
+                    if verbose: 
+                        print(f"Edge not found in graph ({edge})")
                 else: 
-                    print(f"Removed edge from graph: {edge}")
+                    if verbose: 
+                        print(f"Removed edge from graph: {edge}")
 
                 del_idx.append(idx)
 
