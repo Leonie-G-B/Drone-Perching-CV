@@ -1,10 +1,18 @@
 
-from utils import load_in_img
+from utils import load_in_img, load_in_rdom_imgs
 import image_processing as TreeProcessor
+
+
+####### DEFAULT IMG AND MASK LOCS #########
+IMG = "yolo/dataset/images/train/Albizia julibrissin_branch_1 (2).jpg"
+MASK = "yolo/dataset/masks/train/Albizia julibrissin_branch_1 (2).png"
+###########################################
+
+
 
 # Main call point for processing the tree input images
 
-def main():
+def main(rdom = False):
     # Load in the model
 
     # Segmentation 
@@ -13,12 +21,15 @@ def main():
     #### we can just laod in a segmentation example 
     #### and use that to test the rest of the pipeline
 
-    img_loc, mask_loc = load_in_rdom_imgs("yolo/dataset/images/train", "yolo/dataset/masks/train")
 
-    # example_img  = load_in_img(IMG)
-    # example_mask = load_in_img(MASK)
-    example_img  = load_in_img(img_loc)
-    example_mask = load_in_img(mask_loc)
+    if rdom:
+        img_loc, mask_loc = load_in_rdom_imgs("yolo/dataset/images/train", "yolo/dataset/masks/train")
+        example_img  = load_in_img(img_loc)
+        example_mask = load_in_img(mask_loc)
+    else:
+        example_img  = load_in_img(IMG)
+        example_mask = load_in_img(MASK)
+    
 
 
     # Initialise the tree object
@@ -31,13 +42,10 @@ def main():
     Tree.populate_medial_axis(verbose = False)
 
     # Section brances and populate data structure with relevant information
-    Tree.section_branches()
-
-    # Now can begin eliminating branches that are immediately unsuitable
-
+    Tree.section_branches(verbose=True)
 
     # Analyse remaining branches/ branch sections for suitability
-
+    Tree.analyse_branches()
 
     # Identify best location and show results
 
