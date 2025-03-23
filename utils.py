@@ -8,6 +8,7 @@ from functools import wraps
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
+import matplotlib.patches as patches
 import itertools
 import random
 import networkx as nx
@@ -112,9 +113,8 @@ def curvature(array: list[tuple], window_size: int = 25) -> np.ndarray:
 
 def widths(array: list, pixel_to_length_ratio) -> tuple[float, float, float]:
 
-    np_list = np.array(array) * pixel_to_length_ratio * 0.1
-
-    average_width = np.mean(array)* pixel_to_length_ratio * 0.1
+    np_list = np.array(array) * pixel_to_length_ratio
+    average_width = np.mean(array)* pixel_to_length_ratio 
 
     return average_width, np_list.min(), np_list.max()
 
@@ -292,6 +292,31 @@ def merge_nodes(node, G):
 ## Img/ results visualisation utils ##
 
 
+
+def get_rectangle_patch(x, y, angle, width) -> patches.Rectangle:
+
+    x_start, x_end = x[0], x[-1]
+    y_start, y_end = y[0], y[-1]
+
+    midpoint_id = len(x) // 2
+    midpoint = (x[midpoint_id], y[midpoint_id])
+
+    # get length from start to end (x and y)
+    length = distance(x_start, x_end, y_start, y_end)
+
+    rect = patches.Rectangle(
+        (midpoint[0] - length / 2, midpoint[1] - width / 2),  # Bottom-left corner before rotation
+        length, width,  # Width and height
+        angle=angle,  # Rotation angle in degrees
+        edgecolor='r',
+        facecolor='none',
+        linewidth=2
+    )
+
+    return rect
+
+
+
 def visualise_result(input, category: str, 
                      img_shape : tuple = None, underlay_img : bool = False, img: np.ndarray = None, 
                      nodes: dict = None, highlight_ids: list = None, annotations: dict = None,
@@ -398,7 +423,7 @@ def visualise_result(input, category: str,
                 ax.plot(x, y, color = 'red')
                 # ax.annotate(f"Label: {branch_label}", xy = (x[len(x)//2], y[len(y)//2]))
             else:
-                ax.plot(x, y, color = 'black')
+                ax.plot(x, y, color = 'black', linewidth = 0.5)
         ax.set_xticks([])
         ax.set_yticks([])
     else: 

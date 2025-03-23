@@ -41,13 +41,14 @@ def main(rdom = False):
 
     # Analyse remaining branches/ branch sections for suitability
     Tree.analyse_branches(drone_width = 200, 
-                          claw_width= 80)
+                          claw_width= 80,
+                          verbose=True)
 
     # Identify best location and show results
-    Tree.rank_branches(angle_lambda= 0.5,
+    Tree.rank_branches(angle_lambda= 0.3,
                         curvature_lambda= 0.2,
-                        width_lambda = 0.3)
-
+                        width_lambda = 0.5)
+    Tree.show_results()
 
     pass
 

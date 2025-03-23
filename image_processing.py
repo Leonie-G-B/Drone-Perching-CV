@@ -43,7 +43,6 @@ class Tree:
         
         self.binary_mask = utils.mask_img_to_binary(segmentation) # Binary mask required for medial axis.
         self.skeleton = None
-        self.branches = None
 
     def populate_medial_axis(self, verbose: bool = False):
         self.skeleton, self.medial_axis = perf_medial_axis(self.binary_mask)
@@ -90,8 +89,8 @@ class Tree:
             # define the ratio using the assumption that the widest
             # branch is the trunk, and we just assume that it is 
             # about 20cm wide
-            trunk_est_width = 300 #mm
-            self.pixel_to_length_ratio = max_width / trunk_est_width
+            trunk_est_width = 180 #mm
+            self.pixel_to_length_ratio =  trunk_est_width / max_width
 
         if verbose:
             utils.visualise_result(branches, 'branches', img_shape = self.img.shape,
@@ -165,8 +164,12 @@ class Tree:
                          stride_factor: int = 150,
                          angle_threshold: int = 35,
                          width_threshold : tuple = (30, 110),
-                         curvature_threshold: float = 0.3,
+                         curvature_threshold: float = 0.04,
                          verbose: bool = False):
+        
+        self.width_threshold = width_threshold
+        self.curvature_threshold = curvature_threshold
+        self.angle_threshold = angle_threshold
         
         if pixel_to_length_ratio is None: 
             try: 
@@ -200,11 +203,12 @@ class Tree:
             pixel_sections = utils.sliding_window(pixels_list, 
                                             window_size = int(np.round(drone_width * pixel_to_length_ratio)),
                                             stride = math.ceil (self.img.shape[1] / 150))
-            width_sections = utils.sliding_window(pixels_list, 
+            width_sections = utils.sliding_window(widths_list, 
                                             window_size = int(np.round(drone_width * pixel_to_length_ratio)),
                                             stride = math.ceil (self.img.shape[1] / 150))
             
-            # curvatures[branch] = utils.curvature(pixels_list)
+            if verbose:
+                curvatures[branch] = utils.curvature(pixels_list)
             
             for i, (pixel_section, width_section) in enumerate(zip(pixel_sections, width_sections)):
                 
@@ -216,40 +220,51 @@ class Tree:
 
                 if not (- angle_threshold <= angle_deg <= angle_threshold):
                     continue
-                if min_width< width_threshold[0] or max_width > width_threshold[1]:
+                # if min_width< width_threshold[0] or max_width > width_threshold[1]:
+                #     continue
+                if not width_threshold[0] < avg_width < width_threshold[1]:
                     continue
                 if np.max([curvature_vals.max(), abs(curvature_vals.min())]) > curvature_threshold:
                     continue
 
                 num_viable += 1
-                print(f"Found viable section. Number {num_viable}. Branch {branch}. Branch section {i}.")
+                if verbose:
+                    print(f"Found viable section. Number {num_viable}. Branch {branch}. Branch section {i}.")
                 
                 viable_sections.append({
                 "branch_id": branch,
                 "pixels": pixel_section,
+                "section_id": i,
                 "angle": angle_deg,
                 "curvature": np.mean(curvature_vals),
                 "width_avg": avg_width,
                 "width_min": min_width,
                 "width_max": max_width
                 })
-        pass
+        
 
         print(f"Total number of viable sections: {num_viable}.")
         branch_ids_viable = set([branch['branch_id'] for branch in viable_sections ])
 
-        utils.visualise_result(branches, 'highlight', img_shape = self.img.shape, 
-                               underlay_img=True, img = self.img,
-                               highlight_ids= branch_ids_viable,
-                               title = 'Branches that contain viable sections.')
+        if verbose:
+            utils.visualise_result(branches, 'highlight', img_shape = self.img.shape, 
+                                underlay_img=True, img = self.img,
+                                highlight_ids= branch_ids_viable,
+                                title = 'Branches that contain viable sections.')
 
-        # utils.visualise_curvature(branches, curvatures)
+            utils.visualise_curvature(branches, curvatures)
 
         self.viable_sections = viable_sections
         
     
-    def rank_branches(self, 
-                      width_threshold: tuple = (30, 110)):
+    def rank_branches(self,
+                      angle_lambda: float = 0.5, # penalty weightings
+                      curvature_lambda: float = 0.2,
+                      width_lambda: float = 0.3):
+        
+        if sum([angle_lambda, curvature_lambda, width_lambda]) != 1:
+            print("Penalty weightings do not sum to 1. Critical error.")
+            return
 
         # Now we choose one location of all the options
         # based on how close the claw region (central region)
@@ -257,11 +272,79 @@ class Tree:
 
         perfect_angle = 0 # degrees
         perfect_curvature = 0
-        perfect_width = width_threshold[0] # given its already been filtered and cannot be lower than this lower bound
+        perfect_width = self.width_threshold[0] # given its already been filtered and cannot be lower than this lower bound
         
         sections = self.viable_sections
 
+        ranked_sections = []
+    
+        for section in sections:
+            # Extract the properties of the section
+            angle_deg = section['angle']
+            curvature = section['curvature']
+            avg_width = section['width_avg']
 
+            # Normalize penalties
+            normalized_penalty_angle = abs(angle_deg - perfect_angle) / (2*self.angle_threshold)
+            normalized_penalty_curvature = abs(curvature - perfect_curvature) / (2*self.curvature_threshold)
+            normalized_penalty_width = abs(avg_width - perfect_width) / (self.width_threshold[1] - self.width_threshold[0])
+
+            # Total penalty (with a higher weight for angle)
+            total_penalty = (angle_lambda * normalized_penalty_angle + 
+                            curvature_lambda * normalized_penalty_curvature + 
+                            width_lambda * normalized_penalty_width)
+
+            # Append the section and its penalty for ranking
+            ranked_sections.append({
+                "branch_id": section['branch_id'],
+                "section_id": section.get('section_id', None),  # Keep track of section indices if needed
+                "penalty": total_penalty
+            })
+
+        # Sort sections by penalty
+
+        ranked_sections = sorted(ranked_sections, key = lambda x: x['penalty'])
+        rank_mapping = {(item['branch_id'], item['section_id']): rank for rank, item in enumerate(ranked_sections)}
+
+        for section in sections:
+            section['rank'] = rank_mapping.get((section['branch_id'], section['section_id']), None)
+
+        self.top_5 = sorted(sections, key=lambda x: x['rank'])[:5]
+
+        
+
+    def show_results(self):
+        # Keep this here as its the only plot absolutely integral to the process
+
+        fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+        # underlay the original image
+        image_rgb = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB) 
+        ax.imshow(image_rgb, alpha = 0.6, origin = 'upper')
+
+        # overlay the whole branches in a light grey colour
+        line_colour = (0.8, 0.8, 0.8)
+        for branch_label in self.branch_pixels: 
+            x = self.branch_pixels[branch_label][0][:,0][:,0]
+            y = self.branch_pixels[branch_label][0][:,0][:,1]
+
+            ax.plot(x, y , color = line_colour, linewidth = 1)
+
+        # Plot bounding box around NUMBER 1 result
+        top_result = self.top_5[0]
+
+        x_top =  [point[0] for point in top_result['pixels']]
+        y_top =  [point[1] for point in top_result['pixels']]
+        ax.plot(x_top, y_top, color = 'r', linewidth = 2)
+
+        rect = utils.get_rectangle_patch(
+            x = x_top,
+            y = y_top,
+            width = top_result['width_avg'],
+            angle = top_result['angle'],
+        )
+
+        ax.add_patch(rect)
 
 
 
