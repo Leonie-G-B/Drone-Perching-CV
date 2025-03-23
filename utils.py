@@ -7,6 +7,7 @@ import time
 from functools import wraps 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
 import itertools
 import random
 import networkx as nx
@@ -60,6 +61,63 @@ def load_in_rdom_imgs(img_dir: str, mask_dir: str) -> np.ndarray:
 ## Img processing utils ##
 
 
+def sliding_window(array: list[tuple], window_size: int, stride: float = 1):
+    """
+    Yields points along the array with the specified window size and stride (number of pixels separating each consecutive window).
+    """
+    for i in range(0, len(array) - window_size + 1, stride):
+        yield array[i:i + window_size]
+
+
+def grad(array: list[tuple]) -> tuple:
+
+    x = np.array([i[0] for i in array])
+    y = np.array([i[1] for i in array])
+
+    if len(np.unique(x)) == 1:
+        return 90
+
+    # first, fit a linear approximation: 
+    m , _ = np.polyfit(x, y, 1) # m = gradient, second unused variable is +c
+
+    # determine local angle
+    # first_deriv = np.gradient(y, x) 
+    angle_rad = np.arctan(m) #  reverse tan of grad = local angle
+    angle_deg = np.degrees(angle_rad)
+
+    return angle_deg
+    
+
+def curvature(array: list[tuple], window_size: int = 25) -> np.ndarray:
+
+    x = np.array([i[0] for i in array])
+    y = np.array([i[1] for i in array])
+
+    # Compute first derivatives
+    dx = np.gradient(x)
+    dy = np.gradient(y)
+
+    # Compute second derivatives
+    ddx = np.gradient(dx)
+    ddy = np.gradient(dy)
+
+    # Compute curvature using the formula
+    curvature = (dx * ddy - dy * ddx) / (dx**2 + dy**2)**(3/2)
+
+    curvature_smoothed = np.convolve(curvature, np.ones(window_size) / window_size, mode='same')
+    curvature_smoothed = np.nan_to_num(curvature_smoothed, nan=0)
+
+    return curvature_smoothed
+
+
+def widths(array: list) -> tuple[float, float, float]:
+
+    np_list = np.array(array)
+
+    average_width = np.mean(array)
+
+    return average_width, np_list.min(), np_list.max()
+
 
 def get_branch_width(branch_pixels, medial_axis) -> np.ndarray:
 
@@ -70,7 +128,6 @@ def get_branch_width(branch_pixels, medial_axis) -> np.ndarray:
         width = medial_axis[branch_pixel[0][1], branch_pixel[0][0]]
         assert width, "No width found at branch point"
         branch_width.append(width)  
-
 
     return branch_width
 
@@ -98,7 +155,7 @@ def decide_branch_weighting(branch_widths: np.ndarray, max_width : float, max_le
 
     return weighting
 
-@timeit()
+# @timeit()
 def determine_branch_label(branch: np.ndarray, labels: np.ndarray) -> int:
     """
     Determine the label of the branch given the labels in an image like representation of the skeleton.
@@ -236,7 +293,8 @@ def merge_nodes(node, G):
 
 
 def visualise_result(input, category: str, 
-                     img_shape : tuple = None, underlay_img : bool = False, img: np.ndarray = None, nodes: dict = None) -> None: 
+                     img_shape : tuple = None, underlay_img : bool = False, img: np.ndarray = None, nodes: dict = None,
+                     title : str = None) -> None: 
     """
     Call at any point in the pipeline to visualise the current state. State given by 'category'.
     Note that there is no mechanism by which to ensure the user has given the correct category (this method will likely just fail in that case).
@@ -266,6 +324,11 @@ def visualise_result(input, category: str,
         ax.set_xticks([])
         ax.set_yticks([])
     elif category == 'branches': # TESTED
+        if underlay_img: 
+            assert img is not None, "No image given to underlay"
+            image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
+            ax.imshow(image_rgb, alpha = 0.6, origin = 'upper')
+
         if type(input) == dict:
             for branch in input.values():
                 banch_pixels = branch[0]
@@ -294,7 +357,7 @@ def visualise_result(input, category: str,
             if underlay_img:
                 ax.plot(pixels[:, 0][:,0], pixels[:, 0][:, 1], color = colour)
             else: 
-                ax.plot( pixels[:, 0][:, 0], img_shape[0] -pixels[:, 0][:, 1], color = colour, )
+                ax.plot( pixels[:, 0][:, 0], img_shape[0] -pixels[:, 0][:, 1], color = colour )
 
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm_colours)
         plt.colorbar(sm, ax = ax, label="Branch Weight")
@@ -314,6 +377,10 @@ def visualise_result(input, category: str,
             nx.draw(input)
     else: 
         print("Invalid category given. \nOptions: 'img', 'segmentation', 'medial_axis', 'branches, 'branch_weightings', 'nodes', 'graph'")
+        return
+
+    if title: 
+        ax.set_title(title)
 
     return 
     
@@ -353,31 +420,74 @@ def visualise_metrics(full_input, metrics: dict, img: np.ndarray = None):
     pass
 
 
-def visualise_curvature(full_input, curvatures):
 
-    fig, ax = plt.subplots(figsize = (8, 8))
-    cmap = plt.get_cmap('viridis')
-    norm_colours = plt.Normalize(vmin = 0, vmax = 1)
+def visualise_curvature(full_input, curvatures, window_size: int = 25):
 
-    for branch_label in full_input: 
+    _ , ax = plt.subplots(figsize = (8, 8))
 
+    # cmap = plt.get_cmap('viridis') 
+    cmap = plt.get_cmap('coolwarm') 
+    all_curvatures = np.concatenate(list(curvatures.values()))
+    print(np.min(all_curvatures))
+    print(np.max(all_curvatures))
+    norm_colours = plt.Normalize(vmin=np.min(all_curvatures), vmax=np.max(all_curvatures)) # Normalise by largest and smallest curvature value
+
+    for branch_label in full_input:
         if branch_label not in curvatures:
             continue
 
         x = full_input[branch_label][0][:,0][:,0]
-        y = full_input[branch_label][0][:,0][:,1]
+        y = - full_input[branch_label][0][:,0][:,1]
+        curvature = curvatures[branch_label]
 
-        curvature= curvatures[branch_label]
-        segments = [((x[i], y[i]), (x[i+1], y[i+1])) for i in range(len(x)-1)]
-        colours = cmap(norm_colours(curvature[:-1]))  # Color for each segment
+        num_segments = len(x) // window_size
+        curvature = np.asarray(curvature)
 
-        lc = plt.LineCollection(segments, colors=colours, linewidths=2)
-        ax.add_collection(lc)
+        for i in range(num_segments):
+            start_idx = i * window_size
+            end_idx = start_idx + window_size
 
-        # curvature= curvatures[branch_label]
-        # colour = cmap(norm_colours(curvature))
+            if end_idx >= len(x):  # Avoid going out of bounds
+                break
 
-        # ax.plot(x, y, color = colour)
+            # Extract the segment
+            x_segment = x[start_idx:end_idx]
+            y_segment = y[start_idx:end_idx]
+
+            # Pick the curvature value from the start of the segment (or midpoint)
+            curvature_value = curvature[start_idx]
+
+            # Map curvature to color
+            color = cmap(norm_colours(curvature_value))
+
+            # Plot the segment
+            ax.plot(x_segment, y_segment, color=color, linewidth=2)
+
+        
+        # x_midpts = np.hstack((x[0], 0.5 * (x[1:] + x[:-1]), x[-1]))
+        # y_midpts = np.hstack((y[0], 0.5 * (y[1:] + y[:-1]), y[-1]))
+
+        # # segments = [[(x1, y1), (x2, y2)], ...]
+        # segments = np.array([
+        #     [(x_midpts[i], y_midpts[i]), (x_midpts[i+1], y_midpts[i+1])]
+        #     for i in range(len(x_midpts)-1)
+        # ])
+
+        # lc = LineCollection(segments, cmap=cmap, norm=norm_colours, linewidths=2)
+        # lc.set_array(curvature[:-1]) 
+        # ax.add_collection(lc)  
+
+
+    # ax.autoscale()  
+    # ax.set_aspect('equal')
 
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm_colours)
-    plt.colorbar(sm, ax = ax, label="Branch Weight")
+    sm.set_array([])  # Required for colorbar
+    plt.colorbar(sm, ax=ax, label="Curvature")
+
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    # plt.show()
+
+    return
