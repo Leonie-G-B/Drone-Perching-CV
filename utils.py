@@ -304,16 +304,19 @@ def get_rectangle_patch(x, y, angle, width) -> patches.Rectangle:
     # get length from start to end (x and y)
     length = distance(x_start, x_end, y_start, y_end)
 
+    bottom_left = ((midpoint[0] - length/2 ), (midpoint[1] - width/2))
+
     rect = patches.Rectangle(
-        (midpoint[0] - length / 2, midpoint[1] - width / 2),  # Bottom-left corner before rotation
-        length, width,  # Width and height
-        angle=angle,  # Rotation angle in degrees
+        bottom_left,  # Bottom-left corner before rotation
+        length, width, 
+        angle=angle, 
+        rotation_point= 'center',
         edgecolor='r',
         facecolor='none',
-        linewidth=2
+        linewidth=0.5
     )
 
-    return rect
+    return rect, midpoint
 
 
 
@@ -513,21 +516,6 @@ def visualise_curvature(full_input, curvatures, window_size: int = 25):
 
             # Plot the segment
             ax.plot(x_segment, y_segment, color=color, linewidth=2)
-
-        
-        # x_midpts = np.hstack((x[0], 0.5 * (x[1:] + x[:-1]), x[-1]))
-        # y_midpts = np.hstack((y[0], 0.5 * (y[1:] + y[:-1]), y[-1]))
-
-        # # segments = [[(x1, y1), (x2, y2)], ...]
-        # segments = np.array([
-        #     [(x_midpts[i], y_midpts[i]), (x_midpts[i+1], y_midpts[i+1])]
-        #     for i in range(len(x_midpts)-1)
-        # ])
-
-        # lc = LineCollection(segments, cmap=cmap, norm=norm_colours, linewidths=2)
-        # lc.set_array(curvature[:-1]) 
-        # ax.add_collection(lc)  
-
 
     # ax.autoscale()  
     # ax.set_aspect('equal')

@@ -40,8 +40,8 @@ def main(rdom = False):
     Tree.section_branches(verbose=False)
 
     # Analyse remaining branches/ branch sections for suitability
-    Tree.analyse_branches(drone_width = 200, 
-                          claw_width= 80,
+    Tree.analyse_branches(drone_width = 180, 
+                          claw_width= 70,
                           verbose=True)
 
     # Identify best location and show results

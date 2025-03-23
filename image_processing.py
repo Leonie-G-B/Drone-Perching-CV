@@ -323,7 +323,7 @@ class Tree:
         ax.imshow(image_rgb, alpha = 0.6, origin = 'upper')
 
         # overlay the whole branches in a light grey colour
-        line_colour = (0.8, 0.8, 0.8)
+        line_colour = (0.3, 0.3, 0.3)
         for branch_label in self.branch_pixels: 
             x = self.branch_pixels[branch_label][0][:,0][:,0]
             y = self.branch_pixels[branch_label][0][:,0][:,1]
@@ -335,9 +335,9 @@ class Tree:
 
         x_top =  [point[0] for point in top_result['pixels']]
         y_top =  [point[1] for point in top_result['pixels']]
-        ax.plot(x_top, y_top, color = 'r', linewidth = 2)
+        ax.plot(x_top, y_top, color = 'r', linewidth = 0.5)
 
-        rect = utils.get_rectangle_patch(
+        rect, midpoint = utils.get_rectangle_patch(
             x = x_top,
             y = y_top,
             width = top_result['width_avg'],
@@ -345,6 +345,14 @@ class Tree:
         )
 
         ax.add_patch(rect)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_title("Ideal perching location for drone")
+
+        self.final_result = midpoint
+        print("Result plotting complete!")
+
+        # Add some notes on the charactersitics of that perching location here...
 
 
 
