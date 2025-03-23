@@ -110,11 +110,11 @@ def curvature(array: list[tuple], window_size: int = 25) -> np.ndarray:
     return curvature_smoothed
 
 
-def widths(array: list) -> tuple[float, float, float]:
+def widths(array: list, pixel_to_length_ratio) -> tuple[float, float, float]:
 
-    np_list = np.array(array)
+    np_list = np.array(array) * pixel_to_length_ratio * 0.1
 
-    average_width = np.mean(array)
+    average_width = np.mean(array)* pixel_to_length_ratio * 0.1
 
     return average_width, np_list.min(), np_list.max()
 
@@ -293,7 +293,8 @@ def merge_nodes(node, G):
 
 
 def visualise_result(input, category: str, 
-                     img_shape : tuple = None, underlay_img : bool = False, img: np.ndarray = None, nodes: dict = None,
+                     img_shape : tuple = None, underlay_img : bool = False, img: np.ndarray = None, 
+                     nodes: dict = None, highlight_ids: list = None, annotations: dict = None,
                      title : str = None) -> None: 
     """
     Call at any point in the pipeline to visualise the current state. State given by 'category'.
@@ -306,13 +307,15 @@ def visualise_result(input, category: str,
     'branch_weightings' - dictionary containing branch information (inluding all branch pixels and their weightings).
     'nodes' - list of nodes.
     'graph' - networkx graph object. Include node dict for labelling and positioning.
+    'highlight' - plots branches with specified branches plotted in red to highlight them.
     """
 
     fig, ax = plt.subplots(figsize = (8, 8))
 
 
     if category == 'img': # TESTED
-        ax.imshow(input)
+        image_rgb = cv2.cvtColor(input, cv2.COLOR_BGR2RGB) 
+        ax.imshow(image_rgb)
     elif category == 'segmentation': # TESTED
         ax.set_title("Segmentation result")
         ax.imshow(input, cmap = 'gray')
@@ -375,6 +378,29 @@ def visualise_result(input, category: str,
             nx.draw(input , pos = nodes, with_labels = True)
         else: 
             nx.draw(input)
+    elif category == 'highlight':
+        if highlight_ids is None:
+            print("No specific branches to highlight provided.") 
+            return
+        if underlay_img: 
+            assert img is not None, "No image given to underlay"
+            image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
+            ax.imshow(image_rgb, alpha = 0.6, origin = 'upper')
+
+        for branch_label in input: 
+            x = input[branch_label][0][:,0][:,0]
+            if underlay_img:
+                y = input[branch_label][0][:,0][:,1]
+            else:
+                y = img_shape[0] - input[branch_label][0][:,0][:,1]
+
+            if branch_label in highlight_ids:
+                ax.plot(x, y, color = 'red')
+                # ax.annotate(f"Label: {branch_label}", xy = (x[len(x)//2], y[len(y)//2]))
+            else:
+                ax.plot(x, y, color = 'black')
+        ax.set_xticks([])
+        ax.set_yticks([])
     else: 
         print("Invalid category given. \nOptions: 'img', 'segmentation', 'medial_axis', 'branches, 'branch_weightings', 'nodes', 'graph'")
         return

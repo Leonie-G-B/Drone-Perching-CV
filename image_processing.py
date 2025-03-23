@@ -38,6 +38,7 @@ class Tree:
             resize (float): The factor by which to resize the input image and segmentation output. Default = 1.0 (i.e. no change to original size).
         """
         self.img = cv2.resize(img, None, fx = resize, fy = resize) # Input image
+        utils.visualise_result(self.img, 'img')
         self.segmentation = cv2.resize(segmentation, None, fx = resize, fy = resize) # The output of the segmentation model
         
         self.binary_mask = utils.mask_img_to_binary(segmentation) # Binary mask required for medial axis.
@@ -89,7 +90,7 @@ class Tree:
             # define the ratio using the assumption that the widest
             # branch is the trunk, and we just assume that it is 
             # about 20cm wide
-            trunk_est_width = 200 #mm
+            trunk_est_width = 300 #mm
             self.pixel_to_length_ratio = max_width / trunk_est_width
 
         if verbose:
@@ -162,8 +163,9 @@ class Tree:
                          drone_width: float = None,
                          claw_width: float = None,
                          stride_factor: int = 150,
-                         angle_threshold: tuple = (0, 35),
+                         angle_threshold: int = 35,
                          width_threshold : tuple = (30, 110),
+                         curvature_threshold: float = 0.3,
                          verbose: bool = False):
         
         if pixel_to_length_ratio is None: 
@@ -180,20 +182,87 @@ class Tree:
         branch_widths = self.branch_widths
         G = self.Graph
 
+        viable_sections = []
+        num_viable = 0 
+        curvatures = {}
+
         for branch in branches: 
+            
+            if branches[branch][1] <drone_width * pixel_to_length_ratio: # too small to even consider a window
+                continue
 
             # Analyse the local angle of the branch
+            pixels_list = [tuple(point[0]) for point in branches[branch][0]] # convert it into an easier format to index
+            widths_list = branch_widths[branch]
+
+            assert len(pixels_list) == len(widths_list), "Length of branch pixels and widths values not of same shape. Critical error."
+
+            pixel_sections = utils.sliding_window(pixels_list, 
+                                            window_size = int(np.round(drone_width * pixel_to_length_ratio)),
+                                            stride = math.ceil (self.img.shape[1] / 150))
+            width_sections = utils.sliding_window(pixels_list, 
+                                            window_size = int(np.round(drone_width * pixel_to_length_ratio)),
+                                            stride = math.ceil (self.img.shape[1] / 150))
             
+            # curvatures[branch] = utils.curvature(pixels_list)
+            
+            for i, (pixel_section, width_section) in enumerate(zip(pixel_sections, width_sections)):
+                
+                angle_deg = utils.grad(pixel_section)
 
-            # Analyse the local width of the branch 
+                curvature_vals = utils.curvature(pixel_section)
 
-            # Analyse the branch curvature
+                avg_width, min_width, max_width = utils.widths(width_section, pixel_to_length_ratio)
+
+                if not (- angle_threshold <= angle_deg <= angle_threshold):
+                    continue
+                if min_width< width_threshold[0] or max_width > width_threshold[1]:
+                    continue
+                if np.max([curvature_vals.max(), abs(curvature_vals.min())]) > curvature_threshold:
+                    continue
+
+                num_viable += 1
+                print(f"Found viable section. Number {num_viable}. Branch {branch}. Branch section {i}.")
+                
+                viable_sections.append({
+                "branch_id": branch,
+                "pixels": pixel_section,
+                "angle": angle_deg,
+                "curvature": np.mean(curvature_vals),
+                "width_avg": avg_width,
+                "width_min": min_width,
+                "width_max": max_width
+                })
+        pass
+
+        print(f"Total number of viable sections: {num_viable}.")
+        branch_ids_viable = set([branch['branch_id'] for branch in viable_sections ])
+
+        utils.visualise_result(branches, 'highlight', img_shape = self.img.shape, 
+                               underlay_img=True, img = self.img,
+                               highlight_ids= branch_ids_viable,
+                               title = 'Branches that contain viable sections.')
+
+        # utils.visualise_curvature(branches, curvatures)
+
+        self.viable_sections = viable_sections
+        
+    
+    def rank_branches(self, 
+                      width_threshold: tuple = (30, 110)):
+
+        # Now we choose one location of all the options
+        # based on how close the claw region (central region)
+        # is to the 'ideal' requirements'
+
+        perfect_angle = 0 # degrees
+        perfect_curvature = 0
+        perfect_width = width_threshold[0] # given its already been filtered and cannot be lower than this lower bound
+        
+        sections = self.viable_sections
 
 
 
-            pass
-
-        utils.visualise_curvature(branches, curvatures)
 
 
 @utils.timeit()

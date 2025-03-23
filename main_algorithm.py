@@ -9,7 +9,6 @@ MASK = "yolo/dataset/masks/train/Albizia julibrissin_branch_1 (2).png"
 ###########################################
 
 
-
 # Main call point for processing the tree input images
 
 def main(rdom = False):
@@ -21,7 +20,6 @@ def main(rdom = False):
     #### we can just laod in a segmentation example 
     #### and use that to test the rest of the pipeline
 
-
     if rdom:
         img_loc, mask_loc = load_in_rdom_imgs("yolo/dataset/images/train", "yolo/dataset/masks/train")
         example_img  = load_in_img(img_loc)
@@ -31,23 +29,24 @@ def main(rdom = False):
         example_mask = load_in_img(MASK)
     
 
-
     # Initialise the tree object
     # Tree = TreeProcessor.Tree(img= example_img, segmentation= example_mask, resize = 1)
     Tree = TreeProcessor.Tree(img= example_img, segmentation= example_mask, resize = 1.0)
-
-
 
     # Skeletonisation / medial axis 
     Tree.populate_medial_axis(verbose = False)
 
     # Section brances and populate data structure with relevant information
-    Tree.section_branches(verbose=True)
+    Tree.section_branches(verbose=False)
 
     # Analyse remaining branches/ branch sections for suitability
-    Tree.analyse_branches()
+    Tree.analyse_branches(drone_width = 200, 
+                          claw_width= 80)
 
     # Identify best location and show results
+    Tree.rank_branches(angle_lambda= 0.5,
+                        curvature_lambda= 0.2,
+                        width_lambda = 0.3)
 
 
     pass
