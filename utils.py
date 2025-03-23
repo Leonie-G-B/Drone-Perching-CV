@@ -320,3 +320,64 @@ def visualise_result(input, category: str,
         
 
 
+def visualise_metrics(full_input, metrics: dict, img: np.ndarray = None):
+
+    fig, ax = plt.subplots(figsize = (8, 8))
+
+
+    # visualise the whole tree, and then plot the one specific spotlight branch(es)
+    # with its attriubutes labelled
+    
+    # Plot the original image (brackground, faded)
+    if img is not None: 
+        image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
+        ax.imshow(image_rgb, alpha = 0.6, origin = 'upper')
+
+    # Plot the full_input
+    for branch_label in full_input: 
+        x = full_input[branch_label][0][:,0][:,0]
+        y = full_input[branch_label][0][:,0][:,1]
+        ax.plot(x, y)
+        try:
+            annotate_info = metrics[branch_label]
+        except KeyError:
+            continue
+        else: 
+            midpoint = (x[len(x)//2], y[len(y)//2])
+            ax.annotate(f"Angle: {annotate_info['angle']}", 
+                        xy = midpoint)
+
+
+    # Annotate the metrics 
+
+    pass
+
+
+def visualise_curvature(full_input, curvatures):
+
+    fig, ax = plt.subplots(figsize = (8, 8))
+    cmap = plt.get_cmap('viridis')
+    norm_colours = plt.Normalize(vmin = 0, vmax = 1)
+
+    for branch_label in full_input: 
+
+        if branch_label not in curvatures:
+            continue
+
+        x = full_input[branch_label][0][:,0][:,0]
+        y = full_input[branch_label][0][:,0][:,1]
+
+        curvature= curvatures[branch_label]
+        segments = [((x[i], y[i]), (x[i+1], y[i+1])) for i in range(len(x)-1)]
+        colours = cmap(norm_colours(curvature[:-1]))  # Color for each segment
+
+        lc = plt.LineCollection(segments, colors=colours, linewidths=2)
+        ax.add_collection(lc)
+
+        # curvature= curvatures[branch_label]
+        # colour = cmap(norm_colours(curvature))
+
+        # ax.plot(x, y, color = colour)
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm_colours)
+    plt.colorbar(sm, ax = ax, label="Branch Weight")

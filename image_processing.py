@@ -14,6 +14,7 @@ import networkx as nx
 import numpy as np
 import string
 import operator
+import math
 
 import matplotlib.pyplot as plt # useful during debugging
 
@@ -68,7 +69,7 @@ class Tree:
         # from this point onwards, going to assume there is only one skeleton
         # can be changed - need to assess the implications of there being multiple skeletons
 
-        skel_points, intersec_pts, skeleton_no_intersec, endpts = find_filpix(1, labels, final=True, debug=False, remove_region= False)
+        skel_points, intersec_pts, skeleton_no_intersec, endpts = find_branchpix(1, labels, final=True, debug=False, remove_region= False)
         # skeleton_no_intersec is necessary to separate the skeleton into branches
         
         labeltree, num_branches = nd.label(skeleton_no_intersec, np.ones((3, 3)))
@@ -89,7 +90,7 @@ class Tree:
             # branch is the trunk, and we just assume that it is 
             # about 20cm wide
             trunk_est_width = 200 #mm
-            pixel_to_length_ratio = max_width / trunk_est_width
+            self.pixel_to_length_ratio = max_width / trunk_est_width
 
         if verbose:
             utils.visualise_result(branches, 'branches', img_shape = self.img.shape,
@@ -107,7 +108,7 @@ class Tree:
             branch_widths[branch_lablel] = branch_width
 
             weighting = utils.decide_branch_weighting(branch_width, max_width, max_length, length, 
-                                                      pixel_to_length_ratio,
+                                                      self.pixel_to_length_ratio,
                                                       width_ideal_threshold= (30, 110))
 
             branch_properties[branch_lablel] = [branch, # branch pixels
@@ -131,7 +132,7 @@ class Tree:
         labelisofil_pruned, edge_list_pruned, nodes_pruned, inter_nodes_pruned, G_p, pruned_labels = prune_graph(
             G.copy(), nodes.copy(), edge_list.copy(), labeltree, 
             inter_nodes, loop_edges, max_path, 
-            length_thresh= pixel_to_length_ratio * 50, weight_thresh = 0.4,
+            length_thresh= self.pixel_to_length_ratio * 50, weight_thresh = 0.4,
             max_iter=50)
         
         if verbose:
@@ -156,7 +157,22 @@ class Tree:
         print("Completed sectioning, graph defining, and pruning.")
 
 
-    def analyse_branches(self):
+    def analyse_branches(self, 
+                         pixel_to_length_ratio: float = None, 
+                         drone_width: float = None,
+                         claw_width: float = None,
+                         stride_factor: int = 150,
+                         angle_threshold: tuple = (0, 35),
+                         width_threshold : tuple = (30, 110),
+                         verbose: bool = False):
+        
+        if pixel_to_length_ratio is None: 
+            try: 
+                pixel_to_length_ratio = self.pixel_to_length_ratio
+            except AttributeError:
+                print("No value for pixel_to_length ratio found (passed into funciton or previously calculated).")
+                print("CRITICAL error - returning.")
+                return 
 
         # This is where the branch analysis happens
 
@@ -176,6 +192,8 @@ class Tree:
 
 
             pass
+
+        utils.visualise_curvature(branches, curvatures)
 
 
 @utils.timeit()
@@ -479,7 +497,7 @@ def pre_graph(labelisofil, branches, interpts, ends):
 
 
 @utils.timeit()
-def find_filpix(branches, labelfil, final=True, debug=False, remove_region : bool = False):
+def find_branchpix(branches, labelfil, final=True, debug=False, remove_region : bool = False):
     '''
     MODIFIED SLIGHTLY FROM THE FILFINDER PACKAGE. See: https://github.com/e-koch/FilFinder.
 
