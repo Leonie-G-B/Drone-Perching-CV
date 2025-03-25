@@ -38,7 +38,7 @@ class Tree:
             resize (float): The factor by which to resize the input image and segmentation output. Default = 1.0 (i.e. no change to original size).
         """
         self.img = cv2.resize(img, None, fx = resize, fy = resize) # Input image
-        utils.visualise_result(self.img, 'img')
+        # utils.visualise_result(self.img, 'img')
         self.segmentation = cv2.resize(segmentation, None, fx = resize, fy = resize) # The output of the segmentation model
         
         self.binary_mask = utils.mask_img_to_binary(segmentation) # Binary mask required for medial axis.
@@ -51,9 +51,8 @@ class Tree:
             print("Plotting medial axis result.")
             utils.visualise_result(self.medial_axis, 'medial_axis')
 
-    @utils.timeit()
-    def section_branches(self, pixel_to_length_ratio: float = None, verbose: bool = False):
-
+    # @utils.timeit()
+    def section_branches(self, pixel_to_length_ratio: float = None, prune_graph : bool = True, verbose: bool = False):
 
         labels, num = nd.label(self.skeleton, np.ones((3, 3)))
 
@@ -129,23 +128,26 @@ class Tree:
         # lets start by just pruning the very small branches, then everything 
         # else is considered at the analysis stage
 
-        labelisofil_pruned, edge_list_pruned, nodes_pruned, inter_nodes_pruned, G_p, pruned_labels = prune_graph(
-            G.copy(), nodes.copy(), edge_list.copy(), labeltree, 
-            inter_nodes, loop_edges, max_path, 
-            length_thresh= self.pixel_to_length_ratio * 50, weight_thresh = 0.4,
-            max_iter=50)
+        if prune_graph:
+            labelisofil_pruned, edge_list_pruned, nodes_pruned, inter_nodes_pruned, G_p, pruned_labels = prune_graph(
+                G.copy(), nodes.copy(), edge_list.copy(), labeltree, 
+                inter_nodes, loop_edges, max_path, 
+                length_thresh= self.pixel_to_length_ratio * 50, weight_thresh = 0.4,
+                max_iter=50)
+            
+            branch_properties_pruned = branch_properties.copy()
+            for branch in list(branch_properties_pruned.keys()): 
+                if branch in pruned_labels: 
+                    branch_properties_pruned.pop(branch)
+        else:
+            G_p = G
+            branch_properties_pruned = branch_properties
         
-        if verbose:
+        if verbose and prune_graph:
             utils.visualise_result(G_p, 'graph', nodes=nodes ,
                                    title = 'Graph representation of nodes after pruning.')
-
         
-        branch_properties_pruned = branch_properties.copy()
-        for branch in list(branch_properties_pruned.keys()): 
-            if branch in pruned_labels: 
-                branch_properties_pruned.pop(branch)
-        
-        if verbose: 
+        if verbose and prune_graph: 
             utils.visualise_result(branch_properties_pruned, 'branches', img_shape = self.medial_axis.shape,
                                    title = 'Tree branches (after pruning)')
 
@@ -279,29 +281,25 @@ class Tree:
         ranked_sections = []
     
         for section in sections:
-            # Extract the properties of the section
             angle_deg = section['angle']
             curvature = section['curvature']
             avg_width = section['width_avg']
 
-            # Normalize penalties
+            # normalise penalties
             normalized_penalty_angle = abs(angle_deg - perfect_angle) / (2*self.angle_threshold)
             normalized_penalty_curvature = abs(curvature - perfect_curvature) / (2*self.curvature_threshold)
             normalized_penalty_width = abs(avg_width - perfect_width) / (self.width_threshold[1] - self.width_threshold[0])
 
-            # Total penalty (with a higher weight for angle)
             total_penalty = (angle_lambda * normalized_penalty_angle + 
                             curvature_lambda * normalized_penalty_curvature + 
                             width_lambda * normalized_penalty_width)
 
-            # Append the section and its penalty for ranking
             ranked_sections.append({
                 "branch_id": section['branch_id'],
-                "section_id": section.get('section_id', None),  # Keep track of section indices if needed
+                "section_id": section.get('section_id', None),  
                 "penalty": total_penalty
             })
 
-        # Sort sections by penalty
 
         ranked_sections = sorted(ranked_sections, key = lambda x: x['penalty'])
         rank_mapping = {(item['branch_id'], item['section_id']): rank for rank, item in enumerate(ranked_sections)}
@@ -356,7 +354,7 @@ class Tree:
 
 
 
-@utils.timeit()
+# @utils.timeit()
 def perf_medial_axis(binary_mask: np.ndarray) -> np.ndarray:
     
     skeleton, distance = medial_axis(binary_mask, return_distance=True)
@@ -364,7 +362,7 @@ def perf_medial_axis(binary_mask: np.ndarray) -> np.ndarray:
     return skeleton, distance_on_skeleton
 
 
-@utils.timeit()
+# @utils.timeit()
 def prune_graph(G, nodes, edge_list, labelisofil, inter_nodes,
                 loop_edges, max_path , 
                 length_thresh=0, weight_thresh = 0.2,
@@ -541,7 +539,7 @@ def create_graph(edge_list, nodes, verbose_nodes)-> nx.Graph:
 
 
 
-@utils.timeit()
+# @utils.timeit()
 def pre_graph(labelisofil, branches, interpts, ends):
     '''
 
@@ -656,7 +654,7 @@ def pre_graph(labelisofil, branches, interpts, ends):
 # def prune_graph()
 
 
-@utils.timeit()
+# @utils.timeit()
 def find_branchpix(branches, labelfil, final=True, debug=False, remove_region : bool = False):
     '''
     MODIFIED SLIGHTLY FROM THE FILFINDER PACKAGE. See: https://github.com/e-koch/FilFinder.

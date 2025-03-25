@@ -11,7 +11,7 @@ MASK = "yolo/dataset/masks/train/Albizia julibrissin_branch_1 (2).png"
 
 # Main call point for processing the tree input images
 
-def main(rdom = False):
+def main(verbose: bool = False, rdom = False):
     # Load in the model
 
     # Segmentation 
@@ -34,21 +34,22 @@ def main(rdom = False):
     Tree = TreeProcessor.Tree(img= example_img, segmentation= example_mask, resize = 1.0)
 
     # Skeletonisation / medial axis 
-    Tree.populate_medial_axis(verbose = False)
+    Tree.populate_medial_axis(verbose = verbose)
 
     # Section brances and populate data structure with relevant information
-    Tree.section_branches(verbose=False)
+    Tree.section_branches(prune_graph = False, verbose=verbose)
 
     # Analyse remaining branches/ branch sections for suitability
     Tree.analyse_branches(drone_width = 180, 
                           claw_width= 70,
-                          verbose=True)
+                          verbose=False)
 
     # Identify best location and show results
     Tree.rank_branches(angle_lambda= 0.3,
                         curvature_lambda= 0.2,
                         width_lambda = 0.5)
-    Tree.show_results()
+    if verbose: 
+        Tree.show_results()
 
     pass
 
@@ -56,4 +57,4 @@ def main(rdom = False):
 
 if __name__ == "__main__":
 
-    main()
+    main(verbose = False, rdom = False)
