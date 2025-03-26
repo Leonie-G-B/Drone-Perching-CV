@@ -12,6 +12,11 @@ import matplotlib.patches as patches
 import itertools
 import random
 import networkx as nx
+import matplotlib.colors as mcolors
+import scipy.ndimage as ndi
+import skimage.morphology as skm
+
+
 
 ### Misc util funcs ###
 
@@ -348,10 +353,15 @@ def visualise_result(input, category: str,
         ax.set_title("Segmentation result")
         ax.imshow(input, cmap = 'gray')
     elif category == 'medial_axis': # TESTED 
-        med_skel = ax.imshow(input, cmap= 'hot', alpha = 0.8)
+        disk = skm.disk(4)
+        # thick_skel = ndi.gaussian_filter(input, sigma=1) # dilate it to make it clearer
+        thick_skel = skm.dilation(input, disk)
+        cmap = plt.cm.inferno.copy()
+        cmap.set_under('white')
+        med_skel = ax.imshow(thick_skel, cmap= cmap, alpha = 0.8, norm=mcolors.Normalize(vmin=0.01))
         cbar = fig.colorbar(med_skel, ax=ax, fraction=0.046, pad=0.04)
-        cbar.set_label('Local skeleton width (pixels)', fontsize = 12)
-        ax.set_title("Medial axis result")
+        cbar.set_label('Local distance on skeleton (pixels)', fontsize = 12)
+        ax.set_title("Medial Axis Transform Result")
         ax.set_xticks([])
         ax.set_yticks([])
     elif category == 'branches': # TESTED
