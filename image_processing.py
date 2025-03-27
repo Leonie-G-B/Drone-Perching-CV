@@ -125,7 +125,7 @@ class Tree:
 
         if verbose:
             utils.visualise_result(G, 'graph', nodes=nodes,
-                                   title = 'Graph representation of bodes before pruning.')
+                                   title = 'Graph representation of nodes before pruning.')
 
         # lets start by just pruning the very small branches, then everything 
         # else is considered at the analysis stage
@@ -146,7 +146,7 @@ class Tree:
             branch_properties_pruned = branch_properties
         
         if verbose and prune:
-            utils.visualise_result(G_p, 'graph', nodes=nodes ,
+            utils.visualise_result(G_p, 'graph', nodes=nodes , img_shape= self.img.shape,
                                    title = 'Graph representation of nodes after pruning.')
         
         if verbose and prune: 

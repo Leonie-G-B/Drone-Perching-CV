@@ -37,7 +37,7 @@ def main(verbose: bool = False, rdom = False):
     Tree.populate_medial_axis(verbose = verbose)
 
     # Section brances and populate data structure with relevant information
-    Tree.section_branches(prune_graph = False, verbose=verbose)
+    Tree.section_branches(prune = True, verbose=verbose)
 
     # Analyse remaining branches/ branch sections for suitability
     Tree.analyse_branches(drone_width = 180, 
