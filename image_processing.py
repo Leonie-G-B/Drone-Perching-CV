@@ -52,7 +52,7 @@ class Tree:
             utils.visualise_result(self.medial_axis, 'medial_axis')
 
     # @utils.timeit()
-    def section_branches(self, pixel_to_length_ratio: float = None, prune_graph : bool = True, verbose: bool = False):
+    def section_branches(self, pixel_to_length_ratio: float = None, prune : bool = True, verbose: bool = False):
 
         labels, num = nd.label(self.skeleton, np.ones((3, 3)))
 
@@ -130,7 +130,7 @@ class Tree:
         # lets start by just pruning the very small branches, then everything 
         # else is considered at the analysis stage
 
-        if prune_graph:
+        if prune:
             labelisofil_pruned, edge_list_pruned, nodes_pruned, inter_nodes_pruned, G_p, pruned_labels = prune_graph(
                 G.copy(), nodes.copy(), edge_list.copy(), labeltree, 
                 inter_nodes, loop_edges, max_path, 
@@ -145,11 +145,11 @@ class Tree:
             G_p = G
             branch_properties_pruned = branch_properties
         
-        if verbose and prune_graph:
+        if verbose and prune:
             utils.visualise_result(G_p, 'graph', nodes=nodes ,
                                    title = 'Graph representation of nodes after pruning.')
         
-        if verbose and prune_graph: 
+        if verbose and prune: 
             utils.visualise_result(branch_properties_pruned, 'branches', img_shape = self.medial_axis.shape,
                                    title = 'Tree branches (after pruning)')
 
