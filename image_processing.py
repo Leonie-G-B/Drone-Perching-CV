@@ -70,6 +70,8 @@ class Tree:
 
         skel_points, intersec_pts, skeleton_no_intersec, endpts = find_branchpix(1, labels, final=True, debug=False, remove_region= False)
         # skeleton_no_intersec is necessary to separate the skeleton into branches
+        if verbose:
+            utils.visualise_result(intersec_pts, 'nodes', img_shape = self.img.shape,underlay_img=True, img= skeleton_no_intersec, title= 'Skeleton Intersection Points')
         
         labeltree, num_branches = nd.label(skeleton_no_intersec, np.ones((3, 3)))
 
@@ -651,7 +653,6 @@ def pre_graph(labelisofil, branches, interpts, ends):
 
     return edge_list, nodes, loop_edges, inter_nodes
 
-# def prune_graph()
 
 
 # @utils.timeit()

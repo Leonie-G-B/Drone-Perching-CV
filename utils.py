@@ -8,6 +8,7 @@ from functools import wraps
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
+from matplotlib.lines import Line2D
 import matplotlib.patches as patches
 import itertools
 import random
@@ -405,12 +406,25 @@ def visualise_result(input, category: str,
         plt.title("Sectioned tree branches' calculated weightings.")
         plt.axis('off')
     elif category == 'nodes': 
-        if underlay_img: 
+        if underlay_img: # where the provided img is the skeleto
             assert img is not None, "No image given to underlay"
-            image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
-            ax.imshow(image_rgb, alpha = 0.6, origin = 'upper')
-        for node in input: 
-            ax.scatter(node[0], img_shape[0] - node[1], 'ro')
+            disk = skm.disk(4)
+            thick_skel = skm.dilation(img, disk)
+            thick_skel = np.where(thick_skel == 1, 0, 255).astype(np.uint8)
+            ax.imshow(thick_skel, cmap="gray")
+        if underlay_img:
+            for node in input: 
+                ax.plot(node[0][1], node[0][0], 'ro')
+        else:
+            for node in input: 
+                ax.scatter(node[0][0], img_shape[0] - node[0][1], 'ro')
+        legend_elements = [
+            Line2D([0], [0], color="black", lw=2, label="Skeleton"),  # Black line for skeleton
+            Line2D([0], [0], marker="o", color="w", markerfacecolor="red", markersize=10, label="Intersections")  # Red dot
+        ]
+        ax.legend(handles=legend_elements, loc="lower left", frameon=True, fontsize=14, facecolor="white", edgecolor="black")
+        ax.set_xticks([])
+        ax.set_yticks([])
     elif category == 'graph':
         if nodes: 
             nx.draw(input , pos = nodes, with_labels = True)
